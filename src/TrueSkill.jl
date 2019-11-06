@@ -1,0 +1,3 @@
+module TrueSkill
+
+end # module
