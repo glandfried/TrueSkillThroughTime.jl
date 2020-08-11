@@ -1,5 +1,33 @@
-*.jl.cov
-*.jl.*.cov
-*.jl.mem
-/deps/deps.jl
-/docs/build
+*
+!*/
+
+########################
+# Archivos que NO ignora
+
+!LICENSE
+!license
+
+## Latex
+!*.tex
+*-concordance.tex
+!*.bib
+!*.bst
+!*.sty
+!*.cls
+
+## Codigo
+!*.jl
+!*.py
+!*.R
+!*.c
+!*.sql
+
+## Texto
+!*.md
+!*.sh
+
+## Otros
+!makefile
+!Makefile
+!.keep
+!.gitignore

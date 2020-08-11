@@ -7,7 +7,7 @@ global const SIGMA = (MU/3)::Float64
 global const BETA = (SIGMA / 2)::Float64
 global const GAMMA = (SIGMA / 100)::Float64
 global const DRAW_PROBABILITY = 0.0::Float64
-global const EPSILON = 0.1::Float64
+global const EPSILON = 1e-3::Float64
 global const sqrt2 = sqrt(2)
 global const sqrt2pi = sqrt(2*pi)
 
@@ -91,7 +91,7 @@ function pdf(N::Gaussian, x::Float64)
     functional = exp( -((x - N.mu)^2) / (2*N.sigma ^2) ) 
     return (normalizer * functional)::Float64
 end
-function ppf(N::Gaussian,p::Float64)
+function ppf(N::Gaussian, p::Float64)
     return N.mu - N.sigma * sqrt2  * erfcinv(2 * p)
 end 
 function trunc(N::Gaussian, margin::Float64, tie::Bool)
@@ -150,32 +150,13 @@ mutable struct Rating
     beta::Float64
     gamma::Float64
     name::String
-    function Rating()
-        return new(Nms, BETA, GAMMA, "")
+    function Rating(mu::Float64=MU, sigma::Float64=SIGMA,beta::Float64=BETA,gamma::Float64=GAMMA,name::String="")
+        return new(Gaussian(mu, sigma), beta, gamma, name)
     end
-    function Rating(mu::Float64, sigma::Float64)
-        return new(Gaussian(mu, sigma), BETA, GAMMA, "")
-    end
-    function Rating(mu::Float64, sigma::Float64, beta::Float64)
-        return new(Gaussian(mu, sigma), beta, GAMMA, "")
-    end
-    function Rating(N::Gaussian)
-        return new(N, BETA, GAMMA, "")
-    end
-    function Rating(N::Gaussian,beta::Float64)
-        return new(N, beta, GAMMA, "")
-    end
-    function Rating(N::Gaussian,beta::Float64,gamma::Float64)
-        return new(N, beta, gamma, "")
-    end
-    function Rating(N::Gaussian,beta::Float64,name::String)
-        return new(N, beta, GAMMA, name)
-    end
-    function Rating(N::Gaussian,beta::Float64,gamma::Float64,name::String)
+    function Rating(N::Gaussian,beta::Float64=BETA,gamma::Float64=GAMMA,name::String="")
         return new(N, beta, gamma, name)
     end
 end
-
 Base.show(io::IO, r::Rating) = print("Rating(", round(r.N.mu,digits=3)," ,", round(r.N.sigma,digits=3), ")")
 function forget(R::Rating)
     _sigma = sqrt(R.N.sigma^2 + R.gamma^2)
@@ -193,23 +174,29 @@ mutable struct Game
     # Mutable?
     teams::Vector{Vector{Rating}}
     result::Vector{Int64}
-    order::Vector{Int64}
-    function Game(teams::Vector{Vector{Rating}}, result::Vector{Int64})
+    margin::Float64
+    likelihoods::Vector{Vector{Gaussian}}
+    evidence::Float64
+    function Game(teams::Vector{Vector{Rating}}, result::Vector{Int64},draw_proba::Float64=0.0)
         if length(teams) != length(result)
             return error("length(teams) != length(result)")
         end
-        return new(teams,result,sortperm(result))#,_infs, _infs)
-    end
-end
-Base.length(G::Game) = length(G.result)
-function size(G::Game)
-    res = 0::Int64
-    for e in 1:length(G)
-        for i in 1:length(G.teams[e])
-            res += 1
+        if (0.0 > draw_proba) | (1.0 <= draw_proba)
+            return error("0.0 <= Draw probability < 1.0")
+        elseif 0.0 == draw_proba
+            margin = 0.0
+        else
+            margin = compute_margin(draw_proba,sum([ length(teams[e]) for e in 1:length(teams)]) )
         end
+        _g = new(teams,result,margin,[],0.0)
+        likelihoods(_g)
+        return _g
     end
-    return res
+end        
+Base.length(G::Game) = length(G.result)
+#function Base.getindex
+function size(G::Game)
+    return [length(g.teams[e]) for e in 1:length(g.teams)]
 end
 function performance(G::Game,i::Int64)
     res = N00
@@ -232,25 +219,19 @@ end
 function posterior_lose(tm::team_messages)
     return tm.prior*tm.likelihood_win
 end
-function posterior(tm::team_messages)
+function likelihood(tm::team_messages)
     return tm.likelihood_win*tm.likelihood_lose
 end
 mutable struct diff_messages
     prior::Gaussian
-    posterior::Gaussian
+    likelihood::Gaussian
 end
 function p(dm::diff_messages)
     return dm.prior*dm.likelihood
 end
-function teams(G::Game)
-    return [team_messages(performance(G,G.order[e]), Ninf, Ninf) for e in 1:length(G)]
-end
-function diffs(G::Game)
-    return [diff_messages(Ninf,Ninf) for _ in 1:length(G)-1]
-end
 function update(dm::diff_messages,ta::team_messages,tb::team_messages,margin::Float64,tie::Bool)
     dm.prior = posterior_win(ta) - posterior_lose(tb)
-    dm.posterior = trunc(dm.prior,margin,tie)/dm.prior
+    dm.likelihood = trunc(dm.prior,margin,tie)/dm.prior
 end
 function Base.max(tuple1::Tuple{Float64,Float64}, tuple2::Tuple{Float64,Float64})
     return max(tuple1[1],tuple2[1]), max(tuple1[2],tuple2[2])
@@ -258,46 +239,117 @@ end
 function Base.:>(tuple::Tuple{Float64,Float64}, threshold::Float64)
     return (tuple[1] > threshold) | (tuple[2] > threshold)
 end
-function posterior_teams(g::Game, margin::Float64)#margin=0.5
-    o = g.order
+function likelihood_teams(g::Game)
     r = g.result
-    t = teams(g)
-    d = diffs(g)
+    o = sortperm(r)
+    t = [team_messages(performance(g,o[e]), Ninf, Ninf) for e in 1:length(g)]
+    d = [diff_messages(Ninf,Ninf) for _ in 1:length(g)-1]
+    tie = [r[o[e]]==r[o[e+1]] for e in 1:length(d)]
     step = (Inf, Inf)::Tuple{Float64,Float64}
     iter = 0::Int64
     while (step > 1e-6) & (iter < 10)
         step = (0., 0.)
         for e in 1:length(d)-1
-            update(d[e],t[o[e]],t[o[e+1]],margin,r[o[e]]==r[o[e+1]])
-            likelihood_lose = (posterior_win(t[o[e]]) - d[e].posterior)
+            d[e].prior = posterior_win(t[o[e]]) - posterior_lose(t[o[e+1]])
+            d[e].likelihood = trunc(d[e].prior,g.margin,tie[e])/d[e].prior
+            likelihood_lose = (posterior_win(t[o[e]]) - d[e].likelihood)
             step = max(step,delta(t[o[e+1]].likelihood_lose,likelihood_lose))
             t[o[e+1]].likelihood_lose = likelihood_lose
         end
         for e in length(d):-1:2
-            update(d[e],t[o[e]],t[o[e+1]],margin,r[o[e]]==r[o[e+1]])
-            likelihood_win = (posterior_lose(t[o[e+1]]) + d[e].posterior)
+            d[e].prior = posterior_win(t[o[e]]) - posterior_lose(t[o[e+1]])
+            d[e].likelihood = trunc(d[e].prior,g.margin,tie[e])/d[e].prior
+            likelihood_win = (posterior_lose(t[o[e+1]]) + d[e].likelihood)
             step = max(step,delta(t[o[e]].likelihood_win,likelihood_win))
             t[o[e]].likelihood_win = likelihood_win
         end
         iter += 1
     end
     e = 1 
-    update(d[e],t[o[e]],t[o[e+1]],margin,r[o[e]]==r[o[e+1]])
-    t[o[e]].likelihood_win = (posterior_lose(t[o[e+1]]) + d[e].posterior)
+    d[e].prior = posterior_win(t[o[e]]) - posterior_lose(t[o[e+1]])
+    d[e].likelihood = trunc(d[e].prior,g.margin,tie[e])/d[e].prior
+    t[o[e]].likelihood_win = (posterior_lose(t[o[e+1]]) + d[e].likelihood)
     e = length(d) 
-    update(d[e],t[o[e]],t[o[e+1]],margin,r[o[e]]==r[o[e+1]])
-    t[o[e+1]].likelihood_lose = (posterior_win(t[o[e]]) - d[e].posterior)
-    return [ posterior(t[e]) for e in 1:length(t)]
+    d[e].prior = posterior_win(t[o[e]]) - posterior_lose(t[o[e+1]])
+    d[e].likelihood = trunc(d[e].prior,g.margin,tie[e])/d[e].prior
+    t[o[e+1]].likelihood_lose = (posterior_win(t[o[e]]) - d[e].likelihood)
+    
+    g.evidence = prod([1-cdf(d[e].prior,0.0) for e in 1:length(d)])
+    
+    return [ likelihood(t[e]) for e in 1:length(t)] 
 end
-function posterior_performance(g::Game,margin::Float64)
-    m_t_ft = posterior_teams(g,margin)
-    return [[ m_t_ft[e] - exclude(performance(g,e),g.teams[e][i].N) for i in 1:length(g.teams[e])] for e in 1:length(g)]
+function likelihoods(g::Game)
+    m_t_ft = likelihood_teams(g)
+    g.likelihoods = [[ m_t_ft[e] - exclude(performance(g,e),g.teams[e][i].N) for i in 1:length(g.teams[e])] for e in 1:length(g)]
+    return g.likelihoods
 end
-function posteriors(g::Game,proba::Float64)
-    margin = compute_margin(proba,size(G))
-    m_p_fp = posterior_performance(g,margin)
-    return [[ m_p_fp[e][i] * g.teams[e][i].N for i in 1:length(g.teams[e])] for e in 1:length(g)]
+function posteriors(g::Game)
+    return [[ g.likelihoods[e][i] * g.teams[e][i].N for i in 1:length(g.teams[e])] for e in 1:length(g)]
 end
+function update(g::Game, priors::Array{Array{Gaussian,1},1})
+    for e in 1:length(g.teams)
+        for i in length(g.teams[e])
+            g.teams[e][i].N = priors[e][i]
+        end
+    end
+    likelihoods(g)
+end
+mutable struct Time
+    events::Vector{Vector{Vector{String}}}
+    results::Vector{Vector{Int64}}
+    partake::Dict{String,Vector{Int64}}
+    prior_forward::Dict{String,Rating}
+    prior_backward::Dict{String,Gaussian}
+    likelihoods::Dict{String,Dict{Int64,Gaussian}}
+    evidence::Vector{Float64}
+    function Time(events::Vector{Vector{Vector{String}}}
+                 ,results::Vector{Vector{Int64}}
+                 ,priors::Dict{String,Rating}=Dict()
+                 ,last_time::Dict{String}=Dict()
+                 ,match_id::Vector{String}=[]
+                 ,epsilon::Float64=EPSILON
+                 ,iterations::Int64=10)
+        _time = new(events
+                   ,results
+                   ,Dict{String,Vector{Int64}}()
+                   ,priors
+                   ,Dict{String,Gaussian}()
+                   ,Dict{String,Dict{Int64,Gaussian}}()
+                   ,[])
+        return _time
+    end
+end
+
+t = Time([[["a"],["b"]], [["a"],["c"]]], [[0,1],[1,0]] )
+
+likelihoods::Dict{String,Dict(Int64,)}
+
+@time create_partake(a)
+        
+
+@time g3 = Game([[Rating()],[Rating()]], [1,0])
+@time g3.evidence
+@time update(g3,posteriors(g3) )
+@time g3.evidence
+@time update(g3,posteriors(g3) )
+@time g3.evidence
+posteriors(g3)
+
+# function agents(events::Vector{Vector{Vector{String}}})
+#     return Set(vcat((events...)...))
+# end
+# function in_event(events::Vector{Vector{Vector{String}}},
+#                   agent::String)
+#     return [e for e in 1:length(events) for team in events[e] if agent in team ]
+# end
+# function create_partake(events::Vector{Vector{Vector{String}}})
+#     res = Dict{String,Vector{Int64}}()
+#     for a in agents(events)
+#         res[a] = in_event(events,a)
+#     end
+#     return res
+# end
+
 
 
 #post, setp, iter = posterior_skill(g,0.)
