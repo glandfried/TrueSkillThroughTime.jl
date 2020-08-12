@@ -38,6 +38,11 @@ using Test
         post = ttt.posteriors(g)
         @test isapprox(post[1][1], ttt.Gaussian(20.794779,7.194481), 1e-4) 
         @test isapprox(post[2][1], ttt.Gaussian(29.205220,7.194481), 1e-4)
+        
+        g = ttt.Game([[ttt.Rating(29.,1.)] ,[ttt.Rating()]], [1,0], 0.0)
+        post = ttt.posteriors(g)
+        @test isapprox(post[1][1], ttt.Gaussian(28.896,0.996), 1e-3) 
+        @test isapprox(post[2][1], ttt.Gaussian(32.189,6.062), 1e-3)
     end
     @testset "1vs1vs1" begin
         g = ttt.Game([[ttt.Rating()],[ttt.Rating()],[ttt.Rating()]], [1,0,2])
@@ -95,6 +100,18 @@ using Test
         @test isapprox(post[1][2],ttt.Gaussian(15.000,0.9916),1e-3)
         @test isapprox(post[2][1],ttt.Gaussian(30.000,1.9320),1e-3)
     end
+    @testset "Batch" begin
+        b = ttt.Batch([ [["a"],["b"]], [["a"],["c"]] , [["b"],["c"]] ], [[0,1],[1,0],[0,1]], 2.)
+        @test isapprox(ttt.posterior(b,"a"),ttt.Gaussian(24.96097,6.29954),1e-3)
+        @test isapprox(ttt.posterior(b,"b"),ttt.Gaussian(27.09559,6.01033),1e-3)
+        @test isapprox(ttt.posterior(b,"c"),ttt.Gaussian(24.88968,5.86631),1e-3)
+        setp, iter = ttt.convergence(b)
+        @test isapprox(ttt.posterior(b,"a"),ttt.Gaussian(25.000,5.419),1e-3)
+        @test isapprox(ttt.posterior(b,"b"),ttt.Gaussian(25.000,5.419),1e-3)
+        @test isapprox(ttt.posterior(b,"c"),ttt.Gaussian(25.000,5.419),1e-3)
+    end
+    
+    
     
 end
 

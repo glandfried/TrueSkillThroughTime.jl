@@ -1,5 +1,6 @@
 module TrueSkill
 
+#using Parameters
 #import SpecialFunctions
 
 global const MU = 25.0::Float64
@@ -63,7 +64,7 @@ struct Gaussian
     sigma::Float64
     pi::Float64
     tau::Float64
-    function Gaussian(mu::Float64, sigma::Float64)
+    function Gaussian(mu::Float64=MU,sigma::Float64=SIGMA)
         if sigma < 0
             error("sigma should be greater than 0")
         elseif sigma>0
@@ -76,10 +77,14 @@ struct Gaussian
         return new(mu, sigma, _pi, _tau)
     end
 end
+
+
 global const N01 = Gaussian(0.0, 1.0)
 global const Ninf = Gaussian(0.0, Inf)
 global const Nms = Gaussian(MU, SIGMA)
+global const N0g = Gaussian(0.0, GAMMA)
 global const N00 = Gaussian(0.0, 0.0)
+
 
 Base.show(io::IO, g::Gaussian) = print("Gaussian(mu=", round(g.mu,digits=3)," ,sigma=", round(g.sigma,digits=3), ")")
 function cdf(N::Gaussian, x::Float64)
@@ -129,13 +134,13 @@ function Base.:-(N::Gaussian, M::Gaussian)
 end
 function Base.:*(N::Gaussian, M::Gaussian)
     _pi = N.pi + M.pi
-    _tau = N.tau + M.tau
-    return Gaussian(_tau/_pi, sqrt(1/_pi))        
+    _mu = 1/_pi == Inf ? 0. : (N.tau + M.tau)/_pi
+    return Gaussian(_mu, sqrt(1/_pi))        
 end
 function Base.:/(N::Gaussian, M::Gaussian)
     _pi = N.pi - M.pi
-    _tau = N.tau - M.tau
-    return Gaussian(_tau/_pi, sqrt(1/_pi))        
+    _mu = 1/_pi == Inf ? 0. : (N.tau - M.tau)/_pi
+    return Gaussian(_mu, sqrt(1/_pi))        
 end
 function Base.isapprox(N::Gaussian, M::Gaussian, atol::Real=0)
     return (abs(N.mu - M.mu) < atol) & (abs(N.sigma - M.sigma) < atol)
@@ -158,13 +163,10 @@ mutable struct Rating
     end
 end
 Base.show(io::IO, r::Rating) = print("Rating(", round(r.N.mu,digits=3)," ,", round(r.N.sigma,digits=3), ")")
-function forget(R::Rating)
-    _sigma = sqrt(R.N.sigma^2 + R.gamma^2)
-    return _sigma
-end 
-function forget(R::Rating, t::Int64)
-    _sigma = sqrt(R.N.sigma^2 + (R.gamma*t)^2)
-    return _sigma
+Base.copy(r::Rating) = Rating(r.N,r.beta,r.gamma,r.name)
+function forget(R::Rating, t::Float64)
+    _sigma = max(sqrt(R.N.sigma^2 + (R.gamma*t)^2), SIGMA)
+    return Gaussian(R.N.mu, _sigma)
 end 
 function performance(R::Rating)
     _sigma = sqrt(R.N.sigma^2 + R.beta^2)
@@ -250,33 +252,33 @@ function likelihood_teams(g::Game)
     while (step > 1e-6) & (iter < 10)
         step = (0., 0.)
         for e in 1:length(d)-1
-            d[e].prior = posterior_win(t[o[e]]) - posterior_lose(t[o[e+1]])
+            d[e].prior = posterior_win(t[e]) - posterior_lose(t[e+1])
             d[e].likelihood = trunc(d[e].prior,g.margin,tie[e])/d[e].prior
-            likelihood_lose = (posterior_win(t[o[e]]) - d[e].likelihood)
-            step = max(step,delta(t[o[e+1]].likelihood_lose,likelihood_lose))
-            t[o[e+1]].likelihood_lose = likelihood_lose
+            likelihood_lose = (posterior_win(t[e]) - d[e].likelihood)
+            step = max(step,delta(t[e+1].likelihood_lose,likelihood_lose))
+            t[e+1].likelihood_lose = likelihood_lose
         end
         for e in length(d):-1:2
-            d[e].prior = posterior_win(t[o[e]]) - posterior_lose(t[o[e+1]])
+            d[e].prior = posterior_win(t[e]) - posterior_lose(t[e+1])
             d[e].likelihood = trunc(d[e].prior,g.margin,tie[e])/d[e].prior
-            likelihood_win = (posterior_lose(t[o[e+1]]) + d[e].likelihood)
-            step = max(step,delta(t[o[e]].likelihood_win,likelihood_win))
-            t[o[e]].likelihood_win = likelihood_win
+            likelihood_win = (posterior_lose(t[e+1]) + d[e].likelihood)
+            step = max(step,delta(t[e].likelihood_win,likelihood_win))
+            t[e].likelihood_win = likelihood_win
         end
         iter += 1
     end
     e = 1 
-    d[e].prior = posterior_win(t[o[e]]) - posterior_lose(t[o[e+1]])
+    d[e].prior = posterior_win(t[e]) - posterior_lose(t[e+1])
     d[e].likelihood = trunc(d[e].prior,g.margin,tie[e])/d[e].prior
-    t[o[e]].likelihood_win = (posterior_lose(t[o[e+1]]) + d[e].likelihood)
+    t[e].likelihood_win = (posterior_lose(t[e+1]) + d[e].likelihood)
     e = length(d) 
-    d[e].prior = posterior_win(t[o[e]]) - posterior_lose(t[o[e+1]])
+    d[e].prior = posterior_win(t[e]) - posterior_lose(t[e+1])
     d[e].likelihood = trunc(d[e].prior,g.margin,tie[e])/d[e].prior
-    t[o[e+1]].likelihood_lose = (posterior_win(t[o[e]]) - d[e].likelihood)
+    t[e+1].likelihood_lose = (posterior_win(t[e]) - d[e].likelihood)
     
     g.evidence = prod([1-cdf(d[e].prior,0.0) for e in 1:length(d)])
     
-    return [ likelihood(t[e]) for e in 1:length(t)] 
+    return [ likelihood(t[o[e]]) for e in 1:length(t)] 
 end
 function likelihoods(g::Game)
     m_t_ft = likelihood_teams(g)
@@ -294,63 +296,146 @@ function update(g::Game, priors::Array{Array{Gaussian,1},1})
     end
     likelihoods(g)
 end
-mutable struct Time
+mutable struct Batch
     events::Vector{Vector{Vector{String}}}
     results::Vector{Vector{Int64}}
-    partake::Dict{String,Vector{Int64}}
+    time::Float64
+    elapsed::Dict{String,Float64}
     prior_forward::Dict{String,Rating}
     prior_backward::Dict{String,Gaussian}
-    likelihoods::Dict{String,Dict{Int64,Gaussian}}
-    evidence::Vector{Float64}
-    function Time(events::Vector{Vector{Vector{String}}}
-                 ,results::Vector{Vector{Int64}}
-                 ,priors::Dict{String,Rating}=Dict()
-                 ,last_time::Dict{String}=Dict()
-                 ,match_id::Vector{String}=[]
-                 ,epsilon::Float64=EPSILON
-                 ,iterations::Int64=10)
-        _time = new(events
-                   ,results
-                   ,Dict{String,Vector{Int64}}()
-                   ,priors
+    likelihood::Dict{String,Dict{Int64,Gaussian}}
+    evidences::Vector{Float64}
+    partake::Dict{String,Vector{Int64}}
+    agents::Set{String}
+    function Batch(events::Vector{Vector{Vector{String}}}, results::Vector{Vector{Int64}} 
+                 ,time::Float64, last_time::Dict{String,Float64}=Dict{String,Float64}() , priors::Dict{String,Rating}=Dict{String,Rating}())
+        if length(events)!= length(results)
+            error("length(events)!= length(results)")
+        end
+        b = new(events, results, time, last_time, priors
                    ,Dict{String,Gaussian}()
                    ,Dict{String,Dict{Int64,Gaussian}}()
-                   ,[])
-        return _time
+                   ,[0.0 for _ in 1:length(events)]
+                   ,Dict{String,Vector{Int64}}()
+                   ,Set{String}())
+        
+        b.agents = Set(vcat((b.events...)...))
+        for a in b.agents#a="c"
+            b.partake[a] = [e for e in 1:length(b.events) for team in b.events[e] if a in team ]
+            b.elapsed[a] = haskey(last_time, a) ? (time - last_time[a]) : 0.0
+            if !haskey(priors, a)
+                b.prior_forward[a] = Rating(Nms,BETA,GAMMA,a)
+            else 
+                forget(b.prior_forward[a],b.elapsed)
+            end
+            b.prior_backward[a] = Ninf
+            b.likelihood[a] = Dict{Int64,Gaussian}()
+            for e in b.partake[a]
+                b.likelihood[a][e] = Ninf
+            end
+        end
+        iteration(b)
+        return b
     end
 end
 
-t = Time([[["a"],["b"]], [["a"],["c"]]], [[0,1],[1,0]] )
+Base.show(io::IO, b::Batch) = print("Batch(time=", b.time, ", events=", b.events, ", results=", b.results,")")
+Base.length(b::Batch) = length(b.results)
+function likelihood(b::Batch, agent::String)   
+    return prod([value for (_, value) in b.likelihood[agent]])
+end
+function posterior(b::Batch, agent::String)
+    return likelihood(b, agent)*b.prior_backward[agent]*b.prior_forward[agent].N   
+end
+function within_prior(b::Batch, agent::String, event::Int64)
+    res = copy(b.prior_forward[agent])
+    res.N = posterior(b,agent)/b.likelihood[agent][event]
+    return res
+end
+function within_priors(b::Batch, event::Int64)
+    return [[within_prior(b, a, event) for a in team] for team in b.events[event]]
+end
+function iteration(b::Batch)
+    for e in 1:length(b)
+        g = Game(within_priors(b,e), b.results[e])
+        teams = b.events[e]
+        for t in 1:length(teams)
+            for j in 1:length(teams[t])
+                b.likelihood[teams[t][j]][e] = g.likelihoods[t][j] 
+            end
+        end
+        b.evidences[e] = g.evidence
+    end
+end
+function posterior_forward(b::Batch, agent::String)
+    res = copy(b.prior_forward[agent])
+    res.N = b.priors_forward[a]*likelihood(b,a)
+    return res
+end
+function posterior_backward(b::Batch, agent::String)
+    res = copy(b.prior_forward[agent])
+    res.N = likelihood(b,a)*b.prior_backward[a]
+    return res
+end
+function forward_priors_out(b::Batch)
+    res = Dict{String,Rating}()
+    for a in b.agents
+        res[a] = posterior_forward(b,a)
+    end
+    return res
+end
+function backward_priors_out(b::Batch)
+    res = Dict{String,Rating}()
+    for a in b.agents
+        res[a] = forget(posterior_backward(b,a),b.elapsed[a])
+    end
+    return res
+end
 
-likelihoods::Dict{String,Dict(Int64,)}
+function convergence(b::Batch)
+    step = (Inf, Inf)::Tuple{Float64,Float64}
+    iter = 0::Int64
+    while (step > 1e-3) & (iter < 10)
+        step = (0., 0.)
+        old_likelihood = deepcopy(b.likelihood)
+        iteration(b)
+        for (a, dict) in b.likelihood
+            for (e, value) in dict
+                step = max(step,delta(value,old_likelihood[a][e]))               
+            end
+        end
+        iter += 1
+    end
+    return step , iter
+end
 
-@time create_partake(a)
-        
+# 
 
-@time g3 = Game([[Rating()],[Rating()]], [1,0])
-@time g3.evidence
-@time update(g3,posteriors(g3) )
-@time g3.evidence
-@time update(g3,posteriors(g3) )
-@time g3.evidence
-posteriors(g3)
-
-# function agents(events::Vector{Vector{Vector{String}}})
-#     return Set(vcat((events...)...))
-# end
-# function in_event(events::Vector{Vector{Vector{String}}},
-#                   agent::String)
-#     return [e for e in 1:length(events) for team in events[e] if agent in team ]
-# end
-# function create_partake(events::Vector{Vector{Vector{String}}})
-#     res = Dict{String,Vector{Int64}}()
-#     for a in agents(events)
-#         res[a] = in_event(events,a)
-#     end
-#     return res
-# end
-
-
+# old_likelihood = [ [b.likelihood[a][1] for a in teams] for teams in b.events[1]]
+# b.likelihood["a"][1]
+# b.likelihood["a"][1] = N01
+# old_likelihood[1][1] 
+# 
+# g = Game([[Rating()],[Rating()]], [0,1])
+# posteriors(g)
+# g2 = Game([[Rating(29.205,1.)],[Rating()]], [1,0])         
+# posteriors(g2 )[2][1]
+# @time b = Batch([ [["a"],["b"]], [["a"],["c"]] ], [[0,1],[1,0]],2.)
+# 
+# b.events
+# b.likelihood
+# b.evidences
+# 
+# iteration(b)
+# @time within_priors(b,2)
+# 
+# @time g3 = Game([[Rating()],[Rating()]], [1,0])
+# @time g3.evidence
+# @time update(g3,posteriors(g3) )
+# @time g3.evidence
+# @time update(g3,posteriors(g3) )
+# @time g3.evidence
+# posteriors(g3)
 
 #post, setp, iter = posterior_skill(g,0.)
 #g3 = Game([[Rating()],[Rating()],[Rating()]], [1,0,2])
