@@ -58,26 +58,48 @@ function erfcinv(y::Float64)
     end
     return r
 end
+function tau_pi(mu::Float64, sigma::Float64)
+    if sigma < 0 
+        error("sigma should be greater than 0")
+    elseif sigma > 0.
+        _pi = sigma^-2
+        _tau = _pi * mu
+    else
+        _pi = Inf
+        _tau = Inf
+    end
+    return _tau, _pi
+end
+function mu_sigma(_tau::Float64, _pi::Float64)
+    if _pi < 0.
+        error("Precision should be greater than 0")
+    elseif _pi > 0.0
+        sigma = sqrt(1/_pi)
+        mu = _tau / _pi
+    else
+        sigma = Inf
+        mu = 0
+    end
+    return mu, sigma
+end
+
 struct Gaussian
     # TODO: support Gaussian(mu=0.0,sigma=1.0)
     mu::Float64
     sigma::Float64
-    pi::Float64
     tau::Float64
-    function Gaussian(mu::Float64=MU,sigma::Float64=SIGMA)
-        if sigma < 0
-            error("sigma should be greater than 0")
-        elseif sigma>0
-            _pi = sigma^-2
-            _tau = _pi * mu
+    pi::Float64
+    function Gaussian(a::Float64=MU, b::Float64=SIGMA, inverse::Bool=false)
+        if !inverse
+            mu, sigma = (a, b)
+            _tau, _pi = tau_pi(mu, sigma)
         else
-            _pi = Inf
-            _tau = Inf
+            _tau, _pi = (a, b)
+            mu, sigma = mu_sigma(_tau, _pi)
         end
-        return new(mu, sigma, _pi, _tau)
+        return new(mu, sigma, _tau, _pi)
     end
 end
-
 
 global const N01 = Gaussian(0.0, 1.0)
 global const Ninf = Gaussian(0.0, Inf)
@@ -134,13 +156,13 @@ function Base.:-(N::Gaussian, M::Gaussian)
 end
 function Base.:*(N::Gaussian, M::Gaussian)
     _pi = N.pi + M.pi
-    _mu = 1/_pi == Inf ? 0. : (N.tau + M.tau)/_pi
-    return Gaussian(_mu, sqrt(1/_pi))        
+    _tau = N.tau + M.tau
+    return Gaussian(_tau, _pi, true)        
 end
 function Base.:/(N::Gaussian, M::Gaussian)
     _pi = N.pi - M.pi
-    _mu = 1/_pi == Inf ? 0. : (N.tau - M.tau)/_pi
-    return Gaussian(_mu, sqrt(1/_pi))        
+    _tau = N.tau - M.tau
+    return Gaussian(_tau, _pi, true)        
 end
 function Base.isapprox(N::Gaussian, M::Gaussian, atol::Real=0)
     return (abs(N.mu - M.mu) < atol) & (abs(N.sigma - M.sigma) < atol)
@@ -304,9 +326,11 @@ mutable struct Batch
     prior_forward::Dict{String,Rating}
     prior_backward::Dict{String,Gaussian}
     likelihood::Dict{String,Dict{Int64,Gaussian}}
+    old_within_prior::Dict{String,Dict{Int64,Gaussian}}
     evidences::Vector{Float64}
     partake::Dict{String,Vector{Int64}}
     agents::Set{String}
+    max_step::Tuple{Float64, Float64}
     function Batch(events::Vector{Vector{Vector{String}}}, results::Vector{Vector{Int64}} 
                  ,time::Float64, last_time::Dict{String,Float64}=Dict{String,Float64}() , priors::Dict{String,Rating}=Dict{String,Rating}())
         if length(events)!= length(results)
@@ -315,9 +339,11 @@ mutable struct Batch
         b = new(events, results, time, last_time, priors
                    ,Dict{String,Gaussian}()
                    ,Dict{String,Dict{Int64,Gaussian}}()
+                   ,Dict{String,Dict{Int64,Gaussian}}()
                    ,[0.0 for _ in 1:length(events)]
                    ,Dict{String,Vector{Int64}}()
-                   ,Set{String}())
+                   ,Set{String}()
+                   ,(Inf, Inf))
         
         b.agents = Set(vcat((b.events...)...))
         for a in b.agents#a="c"
@@ -330,11 +356,13 @@ mutable struct Batch
             end
             b.prior_backward[a] = Ninf
             b.likelihood[a] = Dict{Int64,Gaussian}()
+            b.old_within_prior[a] = Dict{Int64,Gaussian}()
             for e in b.partake[a]
                 b.likelihood[a][e] = Ninf
+                b.old_within_prior[a][e] = b.prior_forward[a].N
             end
         end
-        iteration(b)
+        b.max_step = iteration(b)
         return b
     end
 end
@@ -356,25 +384,39 @@ function within_priors(b::Batch, event::Int64)
     return [[within_prior(b, a, event) for a in team] for team in b.events[event]]
 end
 function iteration(b::Batch)
+    step = (0., 0.)
     for e in 1:length(b)
-        g = Game(within_priors(b,e), b.results[e])
+        _priors = within_priors(b,e)
         teams = b.events[e]
+                
+        for t in 1:length(teams)
+            for j in 1:length(teams[t])
+                step = max(step, delta(b.old_within_prior[teams[t][j]][e],_priors[t][j].N))
+                b.old_within_prior[teams[t][j]][e] = _priors[t][j].N
+            end
+        end
+        
+        g = Game(_priors, b.results[e])
+        
         for t in 1:length(teams)
             for j in 1:length(teams[t])
                 b.likelihood[teams[t][j]][e] = g.likelihoods[t][j] 
             end
         end
+        
         b.evidences[e] = g.evidence
+        
     end
+    return step
 end
 function posterior_forward(b::Batch, agent::String)
     res = copy(b.prior_forward[agent])
-    res.N = b.priors_forward[a]*likelihood(b,a)
+    res.N = b.priors_forward[agent]*likelihood(b,agent)
     return res
 end
 function posterior_backward(b::Batch, agent::String)
     res = copy(b.prior_forward[agent])
-    res.N = likelihood(b,a)*b.prior_backward[a]
+    res.N = likelihood(b,agent)*b.prior_backward[agent]
     return res
 end
 function forward_priors_out(b::Batch)
@@ -393,55 +435,13 @@ function backward_priors_out(b::Batch)
 end
 
 function convergence(b::Batch)
-    step = (Inf, Inf)::Tuple{Float64,Float64}
-    iter = 0::Int64
-    while (step > 1e-3) & (iter < 10)
-        step = (0., 0.)
-        old_likelihood = deepcopy(b.likelihood)
-        iteration(b)
-        for (a, dict) in b.likelihood
-            for (e, value) in dict
-                step = max(step,delta(value,old_likelihood[a][e]))               
-            end
-        end
+    iter = 0::Int64    
+    while (b.max_step > 1e-3) & (iter < 10)
+        b.max_step = iteration(b)
         iter += 1
     end
-    return step , iter
+    return iter
 end
 
-# 
-
-# old_likelihood = [ [b.likelihood[a][1] for a in teams] for teams in b.events[1]]
-# b.likelihood["a"][1]
-# b.likelihood["a"][1] = N01
-# old_likelihood[1][1] 
-# 
-# g = Game([[Rating()],[Rating()]], [0,1])
-# posteriors(g)
-# g2 = Game([[Rating(29.205,1.)],[Rating()]], [1,0])         
-# posteriors(g2 )[2][1]
-# @time b = Batch([ [["a"],["b"]], [["a"],["c"]] ], [[0,1],[1,0]],2.)
-# 
-# b.events
-# b.likelihood
-# b.evidences
-# 
-# iteration(b)
-# @time within_priors(b,2)
-# 
-# @time g3 = Game([[Rating()],[Rating()]], [1,0])
-# @time g3.evidence
-# @time update(g3,posteriors(g3) )
-# @time g3.evidence
-# @time update(g3,posteriors(g3) )
-# @time g3.evidence
-# posteriors(g3)
-
-#post, setp, iter = posterior_skill(g,0.)
-#g3 = Game([[Rating()],[Rating()],[Rating()]], [1,0,2])
-#@time post3 = posterior_skill(g3,0.)
-#post3[1][1].mu 
-#post3[2][1]
-#post3[3][1]
 
 end # module
