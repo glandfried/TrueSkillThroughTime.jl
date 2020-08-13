@@ -131,7 +131,25 @@ using Test
             @test isapprox(ttt.posterior(b,"c"),ttt.Gaussian(25.000,5.419),1e-3)
         end
     end
-    
+    @testset "History" begin
+        @testset "TrueSkill initalization" begin
+            events = [ [["a"],["b"]], [["a"],["c"]] , [["b"],["c"]] ]
+            results = [[0,1],[1,0],[0,1]]
+            h = ttt.History(events, results, [1,2,3])
+            
+            @test !(h.batches[1].max_step > 1e-6) & !(h.batches[2].max_step > 1e-6)
+            @test isapprox(ttt.posterior(h.batches[1],"a"),ttt.Gaussian(29.205,7.19448),1e-3)
+
+            observed = h.batches[2].prior_forward["a"].N.sigma 
+            expected = sqrt((ttt.GAMMA*1)^2 +  ttt.posterior(h.batches[1],"a").sigma^2)
+            @test isapprox(observed, expected)
+            
+            observed = ttt.posterior(h.batches[2],"a")
+            g = ttt.Game([[h.batches[2].prior_forward["a"]],[h.batches[2].prior_forward["c"]]],[1,0])
+            expected = ttt.posteriors(g)[1][1]
+            @test isapprox(observed, expected, 1e-7)
+        end
+    end
     
     
 end
