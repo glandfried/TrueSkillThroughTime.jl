@@ -186,9 +186,9 @@ mutable struct Rating
 end
 Base.show(io::IO, r::Rating) = print("Rating(", round(r.N.mu,digits=3)," ,", round(r.N.sigma,digits=3), ")")
 Base.copy(r::Rating) = Rating(r.N,r.beta,r.gamma,r.name)
-function forget(R::Rating, t::Float64)
+function forget(R::Rating, t::Int64)
     _sigma = max(sqrt(R.N.sigma^2 + (R.gamma*t)^2), SIGMA)
-    return Gaussian(R.N.mu, _sigma)
+    return Rating(Gaussian(R.N.mu, _sigma),R.beta,R.gamma,R.name)
 end 
 function performance(R::Rating)
     _sigma = sqrt(R.N.sigma^2 + R.beta^2)
@@ -318,11 +318,12 @@ function update(g::Game, priors::Array{Array{Gaussian,1},1})
     end
     likelihoods(g)
 end
+
 mutable struct Batch
     events::Vector{Vector{Vector{String}}}
     results::Vector{Vector{Int64}}
-    time::Float64
-    elapsed::Dict{String,Float64}
+    time::Int64
+    elapsed::Dict{String,Int64}
     prior_forward::Dict{String,Rating}
     prior_backward::Dict{String,Gaussian}
     likelihood::Dict{String,Dict{Int64,Gaussian}}
@@ -332,11 +333,13 @@ mutable struct Batch
     agents::Set{String}
     max_step::Tuple{Float64, Float64}
     function Batch(events::Vector{Vector{Vector{String}}}, results::Vector{Vector{Int64}} 
-                 ,time::Float64, last_time::Dict{String,Float64}=Dict{String,Float64}() , priors::Dict{String,Rating}=Dict{String,Rating}())
+                 ,time::Int64, last_time::Dict{String,Int64}=Dict{String,Int64}() , priors::Dict{String,Rating}=Dict{String,Rating}())
         if length(events)!= length(results)
             error("length(events)!= length(results)")
         end
-        b = new(events, results, time, last_time, priors
+        b = new(events, results, time
+                   ,Dict{String,Int64}()
+                   ,Dict{String,Rating}()
                    ,Dict{String,Gaussian}()
                    ,Dict{String,Dict{Int64,Gaussian}}()
                    ,Dict{String,Dict{Int64,Gaussian}}()
@@ -348,11 +351,11 @@ mutable struct Batch
         b.agents = Set(vcat((b.events...)...))
         for a in b.agents#a="c"
             b.partake[a] = [e for e in 1:length(b.events) for team in b.events[e] if a in team ]
-            b.elapsed[a] = haskey(last_time, a) ? (time - last_time[a]) : 0.0
+            b.elapsed[a] = haskey(last_time, a) ? (time - last_time[a]) : 0
             if !haskey(priors, a)
                 b.prior_forward[a] = Rating(Nms,BETA,GAMMA,a)
             else 
-                forget(b.prior_forward[a],b.elapsed)
+                b.prior_forward[a] = forget(priors[a],b.elapsed[a])
             end
             b.prior_backward[a] = Ninf
             b.likelihood[a] = Dict{Int64,Gaussian}()
@@ -409,31 +412,31 @@ function iteration(b::Batch)
     end
     return step
 end
-function posterior_forward(b::Batch, agent::String)
+function forward_prior_out(b::Batch, agent::String)
     res = copy(b.prior_forward[agent])
-    res.N = b.priors_forward[agent]*likelihood(b,agent)
+    res.N *= likelihood(b,agent)
     return res
 end
-function posterior_backward(b::Batch, agent::String)
-    res = copy(b.prior_forward[agent])
-    res.N = likelihood(b,agent)*b.prior_backward[agent]
-    return res
-end
-function forward_priors_out(b::Batch)
-    res = Dict{String,Rating}()
-    for a in b.agents
-        res[a] = posterior_forward(b,a)
-    end
-    return res
-end
-function backward_priors_out(b::Batch)
-    res = Dict{String,Rating}()
-    for a in b.agents
-        res[a] = forget(posterior_backward(b,a),b.elapsed[a])
-    end
-    return res
+function backward_prior_out(b::Batch, agent::String)
+    _r = copy(b.prior_forward[agent])
+    _r.N = likelihood(b,agent)*b.prior_backward[agent]
+    return forget(_r,b.elapsed[agent]).N
 end
 
+# function forward_priors_out(b::Batch)
+#     res = Dict{String,Rating}()
+#     for a in b.agents
+#         res[a] = forward_priors_out(b,a)
+#     end
+#     return res
+# end
+# function backward_priors_out(b::Batch)
+#     res = Dict{String,Gaussian}()
+#     for a in b.agents
+#         res[a] = backward_priors_out(b,a)
+#     end
+#     return res
+# end
 function convergence(b::Batch)
     iter = 0::Int64    
     while (b.max_step > 1e-3) & (iter < 10)
@@ -442,6 +445,60 @@ function convergence(b::Batch)
     end
     return iter
 end
+function history_requirements(events::Vector{Vector{Vector{String}}},results::Vector{Vector{Int64}},times::Vector{Int64})
+    if length(events) != length(results)
+        error("length(events) != length(results)")
+    end
+    if (length(times) > 0) & (length(events) != length(times))
+        error("length(times) > 0) & (length(events) != length(times))")
+    end
+end
+
+mutable struct History
+    events::Vector{Vector{Vector{String}}}
+    results::Vector{Vector{Int64}}
+    times::Vector{Int64}
+    forward_message::Dict{String,Rating}
+    backward_message::Dict{String,Gaussian}
+    last_time::Dict{String,Int64}
+    o::Vector{Int64}
+    batches::Vector{Batch}
+    function History(events::Vector{Vector{Vector{String}}},results::Vector{Vector{Int64}},times::Vector{Int64}=[],priors::Dict{String,Rating}=Dict{String,Rating}())
+        history_requirements(events,results,times)
+        o = length(times)>0 ? sortperm(times) : [i for i in 1:length(events)]
+        _h = new(events, results, times, priors, Dict{String,Gaussian}(), Dict{String,Int64}(), o, Vector{Batch}())
+        return _h
+    end
+end
+Base.length(h::History) = length(h.results)
+Base.show(io::IO, h::History) = print("History(Events=", length(h),")")
+function time_olast(h::History, i::Int64)
+    t = length(h.times) == 0 ? 2 : h.times[h.o[i]]
+    j = i 
+    while (length(h.times)>0) & (j < length(h)) && (h.times[h.o[j+1]] == t)
+        j += 1
+    end
+    return t, j 
+end
+function trueskill(h::History)
+    i = 1::Int64
+    while i <= length(h)#i=1;j=1
+        t, j = time_olast(h,i)
+        b = Batch(h.events[h.o[i:j]],h.results[h.o[i:j]], t, h.last_time, h.forward_message)        
+        push!(h.batches,b)
+        for a in b.agents#a="a"
+            h.last_time[a] = t
+            h.forward_message[a] = forward_prior_out(b,a)
+        end
+        i = j + 1
+    end
+end
+
+# 
+# h = History([ [["a"],["b"]], [["a"],["c"]] , [["b"],["c"]] ], [[0,1],[1,0],[0,1]], [1,2,3])
+# trueskill(h)
+# posterior(h.batches[1],"a")
+# posterior(h.batches[2],"a")
 
 
 end # module
