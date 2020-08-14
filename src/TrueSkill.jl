@@ -8,7 +8,7 @@ global const SIGMA = (MU/3)::Float64
 global const BETA = (SIGMA / 2)::Float64
 global const GAMMA = (SIGMA / 100)::Float64
 global const DRAW_PROBABILITY = 0.0::Float64
-global const EPSILON = 1e-3::Float64
+global const EPSILON = 1e-6::Float64
 global const sqrt2 = sqrt(2)
 global const sqrt2pi = sqrt(2*pi)
 
@@ -365,7 +365,8 @@ mutable struct Batch
                 b.old_within_prior[a][e] = b.prior_forward[a].N
             end
         end
-        b.max_step = iteration(b)
+        iteration(b)
+        b.max_step = step_within_prior(b)
         return b
     end
 end
@@ -378,6 +379,13 @@ end
 function posterior(b::Batch, agent::String)
     return likelihood(b, agent)*b.prior_backward[agent]*b.prior_forward[agent].N   
 end
+function posteriors(b::Batch)
+    res = Dict{String,Gaussian}()
+    for a in b.agents
+        res[a] = posterior(b,a)
+    end
+    return res
+end
 function within_prior(b::Batch, agent::String, event::Int64)
     res = copy(b.prior_forward[agent])
     res.N = posterior(b,agent)/b.likelihood[agent][event]
@@ -387,14 +395,12 @@ function within_priors(b::Batch, event::Int64)
     return [[within_prior(b, a, event) for a in team] for team in b.events[event]]
 end
 function iteration(b::Batch)
-    step = (0., 0.)
     for e in 1:length(b)
         _priors = within_priors(b,e)
         teams = b.events[e]
                 
         for t in 1:length(teams)
             for j in 1:length(teams[t])
-                step = max(step, delta(b.old_within_prior[teams[t][j]][e],_priors[t][j].N))
                 b.old_within_prior[teams[t][j]][e] = _priors[t][j].N
             end
         end
@@ -408,9 +414,7 @@ function iteration(b::Batch)
         end
         
         b.evidences[e] = g.evidence
-        
     end
-    return step
 end
 function forward_prior_out(b::Batch, agent::String)
     res = copy(b.prior_forward[agent])
@@ -418,18 +422,46 @@ function forward_prior_out(b::Batch, agent::String)
     return res
 end
 function backward_prior_out(b::Batch, agent::String)
-    _r = copy(b.prior_forward[agent])
-    _r.N = likelihood(b,agent)*b.prior_backward[agent]
-    return forget(_r,b.elapsed[agent]).N
+    gamma = b.prior_forward[agent].gamma
+    N = likelihood(b,agent)*b.prior_backward[agent]
+    # IMPORTANTE: No usar forget ac\'a
+    # TODO: DOCUMENTAR porque
+    return N+Gaussian(0., gamma*b.elapsed[agent] ) 
 end
-function convergence(b::Batch)
+function step_within_prior(b::Batch)
+    step = (0.,0.)::Tuple{Float64,Float64}
+    for (a, events) in b.partake
+        if length(events) > 0
+        for e in events        
+            step = max(step, delta(b.old_within_prior[a][e],within_prior(b, a, e).N))
+        end end 
+    end
+    return step
+end
+function convergence(b::Batch, epsilon::Float64=EPSILON)
     iter = 0::Int64    
-    while (b.max_step > 1e-3) & (iter < 10)
-        b.max_step = iteration(b)
+    while (b.max_step > epsilon) & (iter < 10)
+        iteration(b)
+        b.max_step = step_within_prior(b)
         iter += 1
     end
     return iter
 end
+function new_backward_info(b::Batch, backward_message::Dict{String,Gaussian})
+    for a in b.agents#a="c"
+        b.prior_backward[a] = haskey(backward_message, a) ? backward_message[a] : Ninf
+    end
+    b.max_step = (Inf, Inf)
+    return convergence(b)
+end
+function new_forward_info(b::Batch, forward_message::Dict{String,Rating})
+    for a in b.agents
+        b.prior_forward[a] = haskey(forward_message, a) ? forget(forward_message[a],b.elapsed[a]) : Rating(Nms)
+    end
+    b.max_step = (Inf, Inf)
+    return convergence(b)
+end
+
 function history_requirements(events::Vector{Vector{Vector{String}}},results::Vector{Vector{Int64}},times::Vector{Int64})
     if length(events) != length(results)
         error("length(events) != length(results)")
@@ -442,19 +474,25 @@ end
 mutable struct History
     size::Int64
     times::Vector{Int64}
+    priors::Dict{String,Rating}
     forward_message::Dict{String,Rating}
     backward_message::Dict{String,Gaussian}
     last_time::Dict{String,Int64}
     batches::Vector{Batch}
+    agents::Set{String}
     function History(events::Vector{Vector{Vector{String}}},results::Vector{Vector{Int64}},times::Vector{Int64}=[],priors::Dict{String,Rating}=Dict{String,Rating}())
         history_requirements(events,results,times)
-        _h = new(length(events), times, priors, Dict{String,Gaussian}(), Dict{String,Int64}(), Vector{Batch}())
+        agents = Set(vcat((events...)...))
+        forward_message = copy(priors)
+        _h = new(length(events), times, priors, forward_message ,Dict{String,Gaussian}(), Dict{String,Int64}(), Vector{Batch}(),agents)
         trueskill(_h, events, results)
         return _h
     end
 end
 Base.length(h::History) = h.size
-Base.show(io::IO, h::History) = print("History(Size=", h.size,", Batches=", length(h.batches) , ")")
+Base.show(io::IO, h::History) = print("History(Size=", h.size
+                                     ,", Batches=", length(h.batches)
+                                     ,", Agents=", length(h.agents), ")")
 function trueskill(h::History, events::Vector{Vector{Vector{String}}},results::Vector{Vector{Int64}})
     o = length(h.times)>0 ? sortperm(h.times) : [i for i in 1:length(events)]
     i = 1::Int64
@@ -470,14 +508,53 @@ function trueskill(h::History, events::Vector{Vector{Vector{String}}},results::V
         i = j + 1
     end
 end
-
-
-if false
-    priors = Dict{String,Rating}()
-    priors["a"] = Rating(29.,1.)
-    h = History([ [["a"],["b"]], [["a"],["c"]] , [["b"],["c"]] ], [[0,1],[1,0],[0,1]], [1,2,3], priors)
-    posterior(h.batches[1],"a")
-    posterior(h.batches[2],"a")
+function diff(old::Dict{String,Gaussian}, new::Dict{String,Gaussian})
+    step = (0., 0.)
+    for (a, _) in old
+        step = max(step, delta(old[a],new[a]))
+    end
+    return step
 end
+function convergence(h::History,epsilon::Float64=EPSILON,iterations::Int64=10)
+    step = (Inf, Inf)::Tuple{Float64,Float64}
+    iter = 1::Int64
+    while (step > epsilon) & (iter <= iterations)
+        step = (0., 0.)
+        
+        h.backward_message=Dict{String,Gaussian}()
+        for j in length(h.batches)-1:-1:1# j=2
+            for a in h.batches[j+1].agents# a = "c"
+                h.backward_message[a] = backward_prior_out(h.batches[j+1],a)
+            end
+            old = copy(posteriors(h.batches[j]))
+            new_backward_info(h.batches[j], h.backward_message)
+            step = max(step, diff(old, posteriors(h.batches[j])))
+        end
+        
+        h.forward_message=copy(h.priors)
+        for j in 2:length(h.batches)#j=2
+            for a in h.batches[j-1].agents#a = "b"
+                h.forward_message[a] = forward_prior_out(h.batches[j-1],a)
+            end
+            old = copy(posteriors(h.batches[j]))
+            new_forward_info(h.batches[j], h.forward_message)
+            step = max(step, diff(old, posteriors(h.batches[j])))
+        end
+        iter += 1
+    end
+    return step, iter
+end
+
+events = [ [["a"],["b"]], [["a"],["c"]] , [["b"],["c"]] ]
+results = [[0,1],[1,0],[0,1]]
+h = History(events, results, [1,2,3])
+convergence(h)
+posterior(h.batches[1],"a")
+posterior(h.batches[1],"b")
+posterior(h.batches[2],"a")
+posterior(h.batches[2],"c")
+posterior(h.batches[3],"b")
+posterior(h.batches[3],"c")
+
 
 end # module
