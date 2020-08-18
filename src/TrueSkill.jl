@@ -177,17 +177,18 @@ mutable struct Rating
     beta::Float64
     gamma::Float64
     name::String
-    function Rating(mu::Float64=MU, sigma::Float64=SIGMA,beta::Float64=BETA,gamma::Float64=GAMMA,name::String="")
-        return new(Gaussian(mu, sigma), beta, gamma, name)
+    draw::Gaussian
+    function Rating(mu::Float64=MU, sigma::Float64=SIGMA,beta::Float64=BETA,gamma::Float64=GAMMA,name::String="",draw::Gaussian=Ninf)
+        return new(Gaussian(mu, sigma), beta, gamma, name, draw)
     end
-    function Rating(N::Gaussian,beta::Float64=BETA,gamma::Float64=GAMMA,name::String="")
-        return new(N, beta, gamma, name)
+    function Rating(N::Gaussian,beta::Float64=BETA,gamma::Float64=GAMMA,name::String="",draw::Gaussian=Ninf)
+        return new(N, beta, gamma, name, draw)
     end
 end
 Base.show(io::IO, r::Rating) = print("Rating(", round(r.N.mu,digits=3)," ,", round(r.N.sigma,digits=3), ")")
 Base.copy(r::Rating) = Rating(r.N,r.beta,r.gamma,r.name)
-function forget(R::Rating, t::Int64)
-    _sigma = min(sqrt(R.N.sigma^2 + (R.gamma*t)^2), SIGMA)
+function forget(R::Rating, t::Int64, max_sigma::Float64=SIGMA)
+    _sigma = min(sqrt(R.N.sigma^2 + (R.gamma*t)^2), max_sigma)
     return Rating(Gaussian(R.N.mu, _sigma),R.beta,R.gamma,R.name)
 end 
 function performance(R::Rating)
@@ -229,22 +230,51 @@ function performance(G::Game,i::Int64)
     end
     return res
 end 
+function draw_performance(G::Game,i::Int64)
+    res = N00
+    for r in G.teams[i]
+        res += r.draw.sigma < Inf ? trunc(r.draw,0.,false) : Ninf
+    end
+    return res
+end 
 mutable struct team_messages
     prior::Gaussian
     likelihood_lose::Gaussian
     likelihood_win::Gaussian
+    likelihood_draw::Gaussian
 end
 function p(tm::team_messages)
-    return tm.prior*tm.likelihood_lose*tm.likelihood_win
+    return tm.prior*tm.likelihood_lose*tm.likelihood_win*tm.likelihood_draw
 end
 function posterior_win(tm::team_messages)
-    return tm.prior*tm.likelihood_lose
+    return tm.prior*tm.likelihood_lose*tm.likelihood_draw
 end
 function posterior_lose(tm::team_messages)
-    return tm.prior*tm.likelihood_win
+    return tm.prior*tm.likelihood_win*tm.likelihood_draw
+end
+function posterior_draw(tm::team_messages)
+    return tm.prior*tm.likelihood_win*tm.likelihood_lose
 end
 function likelihood(tm::team_messages)
-    return tm.likelihood_win*tm.likelihood_lose
+    return tm.likelihood_win*tm.likelihood_lose*tm.likelihood_draw
+end
+mutable struct draw_messages
+    prior::Gaussian
+    prior_team::Gaussian
+    likelihood_lose::Gaussian
+    likelihood_win::Gaussian
+end
+function p(um::draw_messages)
+    return um.prior_team*um.likelihood_lose*um.likelihood_win
+end
+function posterior_win(um::draw_messages)
+    return um.prior_team*um.likelihood_lose
+end
+function posterior_lose(um::draw_messages)
+    return um.prior_team*um.likelihood_win
+end
+function likelihood(um::draw_messages)
+    return um.likelihood_win*um.likelihood_lose
 end
 mutable struct diff_messages
     prior::Gaussian
@@ -252,10 +282,6 @@ mutable struct diff_messages
 end
 function p(dm::diff_messages)
     return dm.prior*dm.likelihood
-end
-function update(dm::diff_messages,ta::team_messages,tb::team_messages,margin::Float64,tie::Bool)
-    dm.prior = posterior_win(ta) - posterior_lose(tb)
-    dm.likelihood = trunc(dm.prior,margin,tie)/dm.prior
 end
 function Base.max(tuple1::Tuple{Float64,Float64}, tuple2::Tuple{Float64,Float64})
     return max(tuple1[1],tuple2[1]), max(tuple1[2],tuple2[2])
@@ -266,17 +292,20 @@ end
 function likelihood_teams(g::Game)
     r = g.result
     o = sortperm(r)
-    t = [team_messages(performance(g,o[e]), Ninf, Ninf) for e in 1:length(g)]
-    d = [diff_messages(Ninf,Ninf) for _ in 1:length(g)-1]
+    t = [team_messages(performance(g,o[e]), Ninf, Ninf, Ninf) for e in 1:length(g)]
+    d = [diff_messages(t[e].prior - t[e+1].prior, Ninf) for e in 1:length(g)-1]
     tie = [r[o[e]]==r[o[e+1]] for e in 1:length(d)]
-    step = (Inf, Inf)::Tuple{Float64,Float64}
-    iter = 0::Int64
+    g.evidence = 1
+    for e in 1:length(d)
+        g.evidence *= !tie[e] ? 1-cdf(d[e].prior, g.margin) : cdf(d[e].prior, g.margin)-cdf(d[e].prior, -g.margin)
+    end
+    step = (Inf, Inf)::Tuple{Float64,Float64}; iter = 0::Int64
     while (step > 1e-6) & (iter < 10)
         step = (0., 0.)
         for e in 1:length(d)-1
             d[e].prior = posterior_win(t[e]) - posterior_lose(t[e+1])
             d[e].likelihood = trunc(d[e].prior,g.margin,tie[e])/d[e].prior
-            likelihood_lose = (posterior_win(t[e]) - d[e].likelihood)
+            likelihood_lose = posterior_win(t[e]) - d[e].likelihood
             step = max(step,delta(t[e+1].likelihood_lose,likelihood_lose))
             t[e+1].likelihood_lose = likelihood_lose
         end
@@ -289,16 +318,12 @@ function likelihood_teams(g::Game)
         end
         iter += 1
     end
-    e = 1 
-    d[e].prior = posterior_win(t[e]) - posterior_lose(t[e+1])
-    d[e].likelihood = trunc(d[e].prior,g.margin,tie[e])/d[e].prior
-    t[e].likelihood_win = (posterior_lose(t[e+1]) + d[e].likelihood)
-    e = length(d) 
-    d[e].prior = posterior_win(t[e]) - posterior_lose(t[e+1])
-    d[e].likelihood = trunc(d[e].prior,g.margin,tie[e])/d[e].prior
-    t[e+1].likelihood_lose = (posterior_win(t[e]) - d[e].likelihood)
-    
-    g.evidence = prod([1-cdf(d[e].prior,0.0) for e in 1:length(d)])
+    if length(d)==1
+        d[1].prior = posterior_win(t[1]) - posterior_lose(t[2])
+        d[1].likelihood = trunc(d[1].prior,g.margin,tie[1])/d[1].prior
+    end
+    t[1].likelihood_win = (posterior_lose(t[2]) + d[1].likelihood)
+    t[end].likelihood_lose = (posterior_win(t[end-1]) - d[end].likelihood)
     
     return [ likelihood(t[o[e]]) for e in 1:length(t)] 
 end
@@ -310,15 +335,6 @@ end
 function posteriors(g::Game)
     return [[ g.likelihoods[e][i] * g.teams[e][i].N for i in 1:length(g.teams[e])] for e in 1:length(g)]
 end
-function update(g::Game, priors::Array{Array{Gaussian,1},1})
-    for e in 1:length(g.teams)
-        for i in length(g.teams[e])
-            g.teams[e][i].N = priors[e][i]
-        end
-    end
-    likelihoods(g)
-end
-
 mutable struct Batch
     events::Vector{Vector{Vector{String}}}
     results::Vector{Vector{Int64}}
@@ -545,16 +561,117 @@ function convergence(h::History,epsilon::Float64=EPSILON,iterations::Int64=10)
     return step, iter
 end
 
-events = [ [["a"],["b"]], [["a"],["c"]] , [["b"],["c"]] ]
-results = [[0,1],[1,0],[0,1]]
-h = History(events, results, [1,2,3])
-convergence(h)
-posterior(h.batches[1],"a")
-posterior(h.batches[1],"b")
-posterior(h.batches[2],"a")
-posterior(h.batches[2],"c")
-posterior(h.batches[3],"b")
-posterior(h.batches[3],"c")
+if false
+    
+    #
+    #
+    # Sin terminar. TTT-D
+    #
+    #
+    
+    
+    ta = [Rating(25.,8.,4.,0.1,"",N01),Rating(25.,8.,4.,0.1,"",N01)]
+    tb = [Rating(25.,8.,4.,0.1,"",N01),Rating(25.,8.,4.,0.1,"",N01)]
+    tc = [Rating(25.,8.,4.,0.1,"",N01),Rating(25.,8.,4.,0.1,"",N01)]
+    td = [Rating(25.,8.,4.,0.1,"",N01),Rating(25.,8.,4.,0.1,"",N01)]
+        
+    g = Game([ta,tb,tc,td], [1,2,2,3],0.1)
+    m_t_ft = likelihood_teams_draw(g)
+    player_likelihood = [[ m_t_ft[e] - exclude(performance(g,e),g.teams[e][i].N) for i in 1:length(g.teams[e])] for e in 1:length(g)]
+    
+    player_posterior = [[ player_likelihood[e][i] * g.teams[e][i].N for i in 1:length(g.teams[e])] for e in 1:length(g)]
 
+    player_posterior[1][1] 
+    player_posterior[2][1] 
+    player_posterior[3][1] 
+    player_posterior[4][1] 
+    trueskill_posteriors = posteriors(g)
+    trueskill_posteriors[1][1] 
+    trueskill_posteriors[2][1] 
+    trueskill_posteriors[3][1] 
+    trueskill_posteriors[4][1] 
+    
+    
+    function likelihood_teams_draw(g::Game)
+        r = g.result
+        o = sortperm(r)
+        t = [team_messages(performance(g,o[e]), Ninf, Ninf, Ninf) for e in 1:length(g)]
+        u = [draw_messages(draw_performance(g,o[e]), draw_performance(g,o[e]) + t[e].prior, Ninf, Ninf) for e in 1:length(g)]
+        tie = [r[o[e]]==r[o[e+1]] for e in 1:length(g)-1]
+        d = [(diff_messages(Ninf, Ninf), diff_messages(Ninf, Ninf),) for e in 1:length(tie) ]
+        step = (Inf, Inf)::Tuple{Float64,Float64}; iter = 0::Int64
+        
+        while (step > 1e-6) & (iter < 20)
+            step = (0., 0.)
+            for e in 1:length(d)#e=2
+                if !tie[e]
+                    #TODO: crear par\'ametros por defecto para trunc()
+                    d[e][1].prior = posterior_win(t[e]) - posterior_lose(u[e+1])
+                    d[e][1].likelihood = trunc(d[e][1].prior,0.,false)/d[e][1].prior
+                    u[e+1].likelihood_lose =  posterior_win(t[e]) - d[e][1].likelihood
+                else
+                    d[e][1].prior = posterior_win(u[e]) - posterior_lose(t[e+1])
+                    d[e][1].likelihood = trunc(d[e][1].prior,0.,false)/d[e][1].prior
+                    t[e+1].likelihood_lose = posterior_win(u[e]) - d[e][1].likelihood
+                    d[e][2].prior = posterior_win(u[e+1]) - posterior_lose(t[e])
+                    d[e][2].likelihood = trunc(d[e][2].prior,0.,false)/d[e][2].prior
+                    u[e+1].likelihood_win = posterior_lose(t[e]) + d[e][2].likelihood
+                end
+                t[e+1].likelihood_draw = likelihood(u[e+1]) - u[e+1].prior
+            end
+            d21_likelihood = d[2][1].likelihood
+            for e in length(d):-1:1
+                if !tie[e]
+                    d[e][1].prior = posterior_win(t[e]) - posterior_lose(u[e+1])
+                    d[e][1].likelihood = trunc(d[e][1].prior,0.,false)/d[e][1].prior
+                    t[e].likelihood_win = posterior_lose(u[e+1]) + d[e][1].likelihood
+                else
+                    d[e][1].prior = posterior_win(u[e]) - posterior_lose(t[e+1])
+                    d[e][1].likelihood = trunc(d[e][1].prior,0.,false)/d[e][1].prior
+                    u[e].likelihood_win = posterior_lose(t[e+1]) + d[e][1].likelihood
+                    d[e][2].prior = posterior_win(u[e+1]) - posterior_lose(t[e])
+                    d[e][2].likelihood = trunc(d[e][2].prior,0.,false)/d[e][2].prior
+                    t[e].likelihood_lose = posterior_win(u[e+1]) - d[e][2].likelihood
+                end
+                u[e].prior_team = posterior_draw(t[e]) + u[e].prior
+            end
+            step = max(step,delta(d[2][1].likelihood,d21_likelihood))
+            iter += 1
+        end
+        if length(d)==1
+            e=1
+            if !tie[e]
+                d[e][1].prior = posterior_win(t[e]) - posterior_lose(u[e+1])
+                d[e][1].likelihood = trunc(d[e][1].prior,0.,false)/d[e][1].prior
+                u[e+1].likelihood_lose =  posterior_win(t[e]) - d[e][1].likelihood
+                t[e+1].likelihood_draw = likelihood(u[e+1]) - u[e+1].prior
+                t[e].likelihood_win = posterior_lose(u[e+1]) + d[e][1].likelihood
+            else
+                while (step > 1e-6) & (iter < 10)
+                    d11_likelihood = d[e][1].likelihood
+                    
+                    u[e].prior_team = posterior_draw(t[e]) + u[e].prior
+                    
+                    d[e][1].prior = posterior_win(u[e]) - posterior_lose(t[e+1])
+                    d[e][1].likelihood = trunc(d[e][1].prior,0.,false)/d[e][1].prior
+                    u[e].likelihood_win = posterior_lose(t[e+1]) + d[e][1].likelihood
+                    t[e+1].likelihood_lose = posterior_win(u[e]) - d[e][1].likelihood
+                    
+                    d[e][2].prior = posterior_win(u[e+1]) - posterior_lose(t[e])
+                    d[e][2].likelihood = trunc(d[e][2].prior,0.,false)/d[e][2].prior
+                    u[e+1].likelihood_win = posterior_lose(t[e]) + d[e][2].likelihood
+                    t[e].likelihood_lose = posterior_win(u[e+1]) - d[e][2].likelihood
+                    
+                    t[e+1].likelihood_draw = likelihood(u[e+1]) - u[e+1].prior
+                    t[e].likelihood_draw = likelihood(u[e]) - u[e].prior
+                    
+                    step = delta(d[1][1].likelihood_win,d11_likelihood)
+                end
+            end
+        end
+        return [ likelihood(t[o[e]]) for e in 1:length(t)]
+    end
+
+end
 
 end # module

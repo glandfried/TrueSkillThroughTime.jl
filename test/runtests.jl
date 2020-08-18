@@ -47,6 +47,8 @@ using Test
         @test isapprox(post[1][1], ttt.Gaussian(20.794779,7.194481), 1e-4) 
         @test isapprox(post[2][1], ttt.Gaussian(29.205220,7.194481), 1e-4)
         
+        
+        
         g = ttt.Game([[ttt.Rating(29.,1.)] ,[ttt.Rating()]], [1,0], 0.0)
         post = ttt.posteriors(g)
         @test isapprox(post[1][1], ttt.Gaussian(28.896,0.996), 1e-3) 
@@ -71,6 +73,7 @@ using Test
         post = ttt.posteriors(g)
         @test isapprox(post[1][1],ttt.Gaussian(25.000,6.469),1e-3)
         @test isapprox(post[2][1],ttt.Gaussian(25.000,6.469),1e-3)
+        
         ta = [ttt.Rating(25.,3.)]
         tb = [ttt.Rating(29.,2.)]
         g = ttt.Game([ta,tb], [0,0], 0.25)
@@ -107,6 +110,43 @@ using Test
         @test isapprox(post[1][1],ttt.Gaussian(15.000,0.9916),1e-3)
         @test isapprox(post[1][2],ttt.Gaussian(15.000,0.9916),1e-3)
         @test isapprox(post[2][1],ttt.Gaussian(30.000,1.9320),1e-3)
+    end
+    @testset "Evidence" begin
+        
+        @testset "1vs1" begin
+            ta = [ttt.Rating(25.,1e-7)]
+            tb = [ttt.Rating(25.,1e-7)]
+            g = ttt.Game([ta,tb], [0,0], 0.25)
+            @test isapprox(g.evidence,0.25)
+            g = ttt.Game([ta,tb], [0,1], 0.25)
+            @test isapprox(g.evidence,0.375)
+        end
+        @testset "1vs1vs1 margin 0" begin
+            ta = [ttt.Rating(25.,1e-7)]
+            tb = [ttt.Rating(25.,1e-7)]
+            tc = [ttt.Rating(25.,1e-7)]
+            
+            
+            g_abc = ttt.Game([ta,tb,tc], [1,2,3], 0.)
+            g_acb = ttt.Game([ta,tb,tc], [1,3,2], 0.)
+            g_bac = ttt.Game([ta,tb,tc], [2,1,3], 0.)
+            g_bca = ttt.Game([ta,tb,tc], [3,1,2], 0.)
+            g_cab = ttt.Game([ta,tb,tc], [2,3,1], 0.)
+            g_cba = ttt.Game([ta,tb,tc], [3,2,1], 0.)
+            
+            d1 = ttt.performance(g_abc,1)-ttt.performance(g_abc,2)
+            
+            proba = 0
+            proba += g_abc.evidence
+            proba += g_acb.evidence
+            proba += g_bac.evidence
+            proba += g_bca.evidence
+            proba += g_cab.evidence
+            proba += g_cba.evidence            
+            println("Porqué la evidencia de todas las combinaciones suma 1.5?")
+            @test  isapprox(proba, 1.49999991)
+        end
+        
     end
     @testset "Batch" begin
         @testset "One event each" begin
@@ -148,6 +188,17 @@ using Test
             g = ttt.Game([[h.batches[2].prior_forward["a"]],[h.batches[2].prior_forward["c"]]],[1,0])
             expected = ttt.posteriors(g)[1][1]
             @test isapprox(observed, expected, 1e-7)
+        end
+        @testset "TrueSkill Through Time" begin
+            events = [ [["a"],["b"]], [["a"],["c"]] , [["b"],["c"]] ]
+            results = [[0,1],[1,0],[0,1]]
+            h = ttt.History(events, results, [1,2,3])
+            step , iter = ttt.convergence(h)
+            ttt.posterior(h.batches[3],"b").mu
+            ttt.posterior(h.batches[3],"b").sigma
+            @test isapprox(ttt.posterior(h.batches[1],"a"),ttt.Gaussian(25.0002673,5.41950697),1e-5)
+            @test isapprox(ttt.posterior(h.batches[1],"b"),ttt.Gaussian(24.9986633,5.41968377),1e-5)
+            @test isapprox(ttt.posterior(h.batches[3],"b"),ttt.Gaussian(25.0029304,5.42076739),1e-5)            
         end
     end
     
