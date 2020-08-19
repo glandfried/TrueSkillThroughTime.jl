@@ -47,8 +47,6 @@ using Test
         @test isapprox(post[1][1], ttt.Gaussian(20.794779,7.194481), 1e-4) 
         @test isapprox(post[2][1], ttt.Gaussian(29.205220,7.194481), 1e-4)
         
-        
-        
         g = ttt.Game([[ttt.Rating(29.,1.)] ,[ttt.Rating()]], [1,0], 0.0)
         post = ttt.posteriors(g)
         @test isapprox(post[1][1], ttt.Gaussian(28.896,0.996), 1e-3) 
@@ -104,9 +102,6 @@ using Test
         tb = [ttt.Rating(30.,2.)]
         g = ttt.Game([ta,tb], [0,0], 0.25)
         post = ttt.posteriors(g)
-        post[1][1].sigma
-        post[1][2].sigma
-        post[2][1].sigma
         @test isapprox(post[1][1],ttt.Gaussian(15.000,0.9916),1e-3)
         @test isapprox(post[1][2],ttt.Gaussian(15.000,0.9916),1e-3)
         @test isapprox(post[2][1],ttt.Gaussian(30.000,1.9320),1e-3)
@@ -143,7 +138,7 @@ using Test
             proba += g_bca.evidence
             proba += g_cab.evidence
             proba += g_cba.evidence            
-            println("Porqué la evidencia de todas las combinaciones suma 1.5?")
+            println("Corregir la evidencia multiequipos para que sume 1")
             @test  isapprox(proba, 1.49999991)
         end
         
