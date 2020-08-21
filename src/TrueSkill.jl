@@ -558,6 +558,7 @@ function convergence(h::History,epsilon::Float64=EPSILON,iterations::Int64=10)
         end
         iter += 1
     end
+    if (length(h.batches) == 1) convergence(h.batches[1]) end
     return step, iter
 end
 

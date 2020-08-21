@@ -184,6 +184,28 @@ using Test
             expected = ttt.posteriors(g)[1][1]
             @test isapprox(observed, expected, 1e-7)
         end
+        @testset "One-batch history" begin
+            composition = [ [["aj"],["bj"]],[["bj"],["cj"]], [["cj"],["aj"]] ]
+            results = [[0,1],[0,1],[0,1]]
+            bache = [1,1,1]
+            h1 = ttt.History(composition,results, bache)
+            # TrueSkill
+            @test isapprox(ttt.posterior(h1.batches[1],"aj"),ttt.Gaussian(22.904,6.010),2)
+            @test isapprox(ttt.posterior(h1.batches[1],"cj"),ttt.Gaussian(25.110,5.866),2)
+            # TTT
+            step , i = ttt.convergence(h1)
+            @test isapprox(ttt.posterior(h1.batches[1],"aj"),ttt.Gaussian(25.000,5.419),2)
+            @test isapprox(ttt.posterior(h1.batches[1],"cj"),ttt.Gaussian(25.000,5.419),2)
+            
+            h2 = ttt.History(composition,results, [1,2,3])
+            # TrueSkill
+            @test isapprox(ttt.posterior(h2.batches[3],"aj"),ttt.Gaussian(22.904,6.012),2)
+            @test isapprox(ttt.posterior(h2.batches[3],"cj"),ttt.Gaussian(25.110,5.867),2)
+            # TTT
+            step , i = ttt.convergence(h2)
+            @test isapprox(ttt.posterior(h2.batches[3],"aj"),ttt.Gaussian(24.997,5.421),2)
+            @test isapprox(ttt.posterior(h2.batches[3],"cj"),ttt.Gaussian(25.000,5.420),2)
+        end
         @testset "TrueSkill Through Time" begin
             events = [ [["a"],["b"]], [["a"],["c"]] , [["b"],["c"]] ]
             results = [[0,1],[1,0],[0,1]]
