@@ -542,6 +542,7 @@ function convergence(h::History,epsilon::Float64=EPSILON,iterations::Int64=10)
     iter = 1::Int64
     while (step > epsilon) & (iter <= iterations)
         step = (0., 0.)
+        print("Iteration = ", iter)
         
         h.backward_message=Dict{String,Gaussian}()
         for j in length(h.batches)-1:-1:1# j=2
@@ -563,8 +564,10 @@ function convergence(h::History,epsilon::Float64=EPSILON,iterations::Int64=10)
             step = max(step, diff(old, posteriors(h.batches[j])))
         end
         iter += 1
+        println(", step = ", step)
     end
     if (length(h.batches) == 1) convergence(h.batches[1]) end
+    println("End")
     return step, iter
 end
 function learning_curves(h::History)
