@@ -2,6 +2,7 @@ include("../src/TrueSkill.jl")
 using .TrueSkill
 global const ttt = TrueSkill
 using Test
+using JLD2
 
 @testset "Tests" begin
     @testset "ppf" begin
@@ -230,7 +231,13 @@ using Test
             @test isapprox(lc["cj"][end][2],ttt.Gaussian(25.000,5.420),2)
         end
     end
-    
-    
+    @testset "Save" begin
+        events = [ [["aj"],["bj"]],[["bj"],["cj"]], [["cj"],["aj"]] ]
+        results = [[0,1],[0,1],[0,1]]    
+        h = ttt.History(events, results, [5,6,7])
+        ttt.convergence(h)
+        @save "test_save.jld2" h
+        lc = ttt.learning_curves(g)
+    end
 end
 
