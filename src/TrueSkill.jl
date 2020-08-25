@@ -496,11 +496,16 @@ mutable struct History
     last_time::Dict{String,Int64}
     batches::Vector{Batch}
     agents::Set{String}
+    partake::Dict{String,Dict{Int64,Batch}}
     function History(events::Vector{Vector{Vector{String}}},results::Vector{Vector{Int64}},times::Vector{Int64}=[],priors::Dict{String,Rating}=Dict{String,Rating}())
         history_requirements(events,results,times)
         agents = Set(vcat((events...)...))
         forward_message = copy(priors)
-        _h = new(length(events), times, priors, forward_message ,Dict{String,Gaussian}(), Dict{String,Int64}(), Vector{Batch}(),agents)
+        partake = Dict{String,Dict{Int64,Batch}}()
+        for a in agents
+            partake[a] = Dict{Int64,Batch}()
+        end
+        _h = new(length(events), times, priors, forward_message ,Dict{String,Gaussian}(), Dict{String,Int64}(), Vector{Batch}(), agents, partake)
         trueskill(_h, events, results)
         return _h
     end
@@ -519,6 +524,7 @@ function trueskill(h::History, events::Vector{Vector{Vector{String}}},results::V
         push!(h.batches,b)
         for a in b.agents
             h.last_time[a] = t
+            h.partake[a][t] = b
             h.forward_message[a] = forward_prior_out(b,a)
         end
         i = j + 1
@@ -561,37 +567,27 @@ function convergence(h::History,epsilon::Float64=EPSILON,iterations::Int64=10)
     if (length(h.batches) == 1) convergence(h.batches[1]) end
     return step, iter
 end
+function learning_curves(h::History)
+    res = Dict{String,Array{Tuple{Int64,Gaussian}}}()
+    for a in h.agents
+        res[a] = sort([ (t, posterior(b,a)) for (t, b) in h.partake[a]])
+    end
+    return res
+end
+
 
 if false
-    
-    #
-    #
-    # Sin terminar. TTT-D
-    #
-    #
-    
-    
-    ta = [Rating(25.,8.,4.,0.1,"",N01),Rating(25.,8.,4.,0.1,"",N01)]
-    tb = [Rating(25.,8.,4.,0.1,"",N01),Rating(25.,8.,4.,0.1,"",N01)]
-    tc = [Rating(25.,8.,4.,0.1,"",N01),Rating(25.,8.,4.,0.1,"",N01)]
-    td = [Rating(25.,8.,4.,0.1,"",N01),Rating(25.,8.,4.,0.1,"",N01)]
-        
-    g = Game([ta,tb,tc,td], [1,2,2,3],0.1)
-    m_t_ft = likelihood_teams_draw(g)
-    player_likelihood = [[ m_t_ft[e] - exclude(performance(g,e),g.teams[e][i].N) for i in 1:length(g.teams[e])] for e in 1:length(g)]
-    
-    player_posterior = [[ player_likelihood[e][i] * g.teams[e][i].N for i in 1:length(g.teams[e])] for e in 1:length(g)]
 
-    player_posterior[1][1] 
-    player_posterior[2][1] 
-    player_posterior[3][1] 
-    player_posterior[4][1] 
-    trueskill_posteriors = posteriors(g)
-    trueskill_posteriors[1][1] 
-    trueskill_posteriors[2][1] 
-    trueskill_posteriors[3][1] 
-    trueskill_posteriors[4][1] 
+    events = [ [["a"],["b"]], [["a"],["c"]] , [["b"],["c"]] ]
+    results = [[0,1],[1,0],[0,1]]
+    times = [1,2,3]
+    h = History(events, results, times)
+            
+
     
+    #
+    # Sin TESTEAR. TTT-D
+    #
     
     function likelihood_teams_draw(g::Game)
         r = g.result

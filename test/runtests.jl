@@ -217,6 +217,18 @@ using Test
             @test isapprox(ttt.posterior(h.batches[1],"b"),ttt.Gaussian(24.9986633,5.41968377),1e-5)
             @test isapprox(ttt.posterior(h.batches[3],"b"),ttt.Gaussian(25.0029304,5.42076739),1e-5)            
         end
+        @testset "Learning curves" begin
+            events = [ [["aj"],["bj"]],[["bj"],["cj"]], [["cj"],["aj"]] ]
+            results = [[0,1],[0,1],[0,1]]    
+            h = ttt.History(events, results, [5,6,7])
+            ttt.convergence(h)
+            lc = ttt.learning_curves(h)
+            
+            @test lc["aj"][1][1] == 5
+            @test lc["aj"][end][1] == 7
+            @test isapprox(lc["aj"][end][2],ttt.Gaussian(24.997,5.421),2)
+            @test isapprox(lc["cj"][end][2],ttt.Gaussian(25.000,5.420),2)
+        end
     end
     
     
