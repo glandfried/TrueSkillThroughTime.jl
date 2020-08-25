@@ -22,16 +22,20 @@ using Dates
     
     println(now())
     
+    ttt.convergence(h)
+    
+    println(now())
+    
     @save "ogs_history.jld2" h
     
-    w_mean = [ ttt.posterior(h.batches[r.row], string(r.white)).mu  for r in eachrow(data) ]                                                            
-    b_mean = [ ttt.posterior(h.batches[r.row], string(r.black)).mu  for r in eachrow(data) ]                                                            
-    w_std = [ ttt.posterior(h.batches[r.row], string(r.white)).sigma  for r in eachrow(data) ]                                                            
-    b_std = [ ttt.posterior(h.batches[r.row], string(r.black)).sigma  for r in eachrow(data) ]                                                            
+    w_mean = [ ttt.posterior(h.batches[r.Row], string(r.white)).mu  for r in eachrow(data) ]                                                            
+    b_mean = [ ttt.posterior(h.batches[r.Row], string(r.black)).mu  for r in eachrow(data) ]                                                            
+    w_std = [ ttt.posterior(h.batches[r.Row], string(r.white)).sigma  for r in eachrow(data) ]                                                            
+    b_std = [ ttt.posterior(h.batches[r.Row], string(r.black)).sigma  for r in eachrow(data) ]                                                            
     
-    h_mean = [ r.handicap > 1 ? ttt.posterior(h.batches[r.row] ,string((r.hhandicap,r.width))).mu : 0 for r in eachrow(data) ]
-    h_std = [ r.handicap > 1 ? ttt.posterior(h.batches[r.row] ,string((r.hhandicap,r.width))).sigma : 0 for r in eachrow(data) ]
-    evidence = [ h.batches[r.row].evidences[1] for r in eachrow(data) ] 
+    h_mean = [ r.handicap > 1 ? ttt.posterior(h.batches[r.Row] ,string((r.handicap,r.width))).mu : 0 for r in eachrow(data) ]
+    h_std = [ r.handicap > 1 ? ttt.posterior(h.batches[r.Row] ,string((r.handicap,r.width))).sigma : 0 for r in eachrow(data) ]
+    evidence = [ h.batches[r.Row].evidences[1] for r in eachrow(data) ] 
     
     @save "ogs_estimations.jld2" w_mean b_mean w_std b_std h_mean h_std evidence
     
