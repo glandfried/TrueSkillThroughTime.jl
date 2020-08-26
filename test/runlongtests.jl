@@ -5,9 +5,10 @@ using Test
 using CSV
 using JLD2
 using Dates
+using DataFrames
 
 @testset "Test OGS" begin
-    data = CSV.read("summary_filtered.csv")
+    data = CSV.read("summary_filtered.csv")    
     prior_dict = Dict{String,ttt.Rating}()
     for h_key in Set([(row.handicap, row.width) for row in eachrow(data) ])
         prior_dict[string(h_key)] = ttt.Rating(0.,25.0/3.,0.,1.0/100)
@@ -26,18 +27,33 @@ using Dates
     
     println(now())
     
+    w_mean = [ ttt.posterior(h.batches[r], string(data[r,"white"])).mu for r in 1:size(data)[1]]                                                            
+    b_mean = [ ttt.posterior(h.batches[r], string(data[r,"black"])).mu  for r in 1:size(data)[1]]                                                            
+    w_std = [ ttt.posterior(h.batches[r], string(data[r,"white"])).sigma for r in 1:size(data)[1]]                                                            
+    b_std = [ ttt.posterior(h.batches[r], string(data[r,"black"])).sigma for r in 1:size(data)[1]]                                                            
+    
+    h_mean = [ data[r,"handicap"] > 1 ? ttt.posterior(h.batches[r] ,string((data[r,"handicap"],data[r,"width"]))).mu : 0.0 for r in 1:size(data)[1]]
+    h_std = [ data[r,"handicap"] > 1 ? ttt.posterior(h.batches[r] ,string((data[r,"handicap"],data[r,"width"]))).sigma : 0.0 for r in 1:size(data)[1]]
+    evidence = [ h.batches[r].evidences[1] for r in 1:size(data)[1]] 
+    
+    df = DataFrame(id = data[:"id"]
+                  ,white = data[:"white"]
+                  ,black = data[:"black"]
+                  ,handicap = data[:"handicap"]
+                  ,width = data[:"width"]
+                  ,w_mean = w_mean
+                  ,b_mean = b_mean
+                  ,w_std = w_std
+                  ,b_std = b_std
+                  ,h_mean = h_mean
+                  ,h_std = h_std
+                  ,evidence = evidence)
+    
+    CSV.write("runlongtest_data.csv", df; header=true)
+    @save "ogs_estimations.jld2" w_mean b_mean w_std b_std h_mean h_std evidence
     @save "ogs_history.jld2" h
     
-    w_mean = [ ttt.posterior(h.batches[r.Row], string(r.white)).mu  for r in eachrow(data) ]                                                            
-    b_mean = [ ttt.posterior(h.batches[r.Row], string(r.black)).mu  for r in eachrow(data) ]                                                            
-    w_std = [ ttt.posterior(h.batches[r.Row], string(r.white)).sigma  for r in eachrow(data) ]                                                            
-    b_std = [ ttt.posterior(h.batches[r.Row], string(r.black)).sigma  for r in eachrow(data) ]                                                            
     
-    h_mean = [ r.handicap > 1 ? ttt.posterior(h.batches[r.Row] ,string((r.handicap,r.width))).mu : 0 for r in eachrow(data) ]
-    h_std = [ r.handicap > 1 ? ttt.posterior(h.batches[r.Row] ,string((r.handicap,r.width))).sigma : 0 for r in eachrow(data) ]
-    evidence = [ h.batches[r.Row].evidences[1] for r in eachrow(data) ] 
-    
-    @save "ogs_estimations.jld2" w_mean b_mean w_std b_std h_mean h_std evidence
     
 end
 
