@@ -9,6 +9,7 @@ global const BETA = (SIGMA / 2)::Float64
 global const GAMMA = 0.15*SIGMA ::Float64
 global const DRAW_PROBABILITY = 0.0::Float64
 global const EPSILON = 1e-6::Float64
+global const ITER = 10::Int64
 global const sqrt2 = sqrt(2)
 global const sqrt2pi = sqrt(2*pi)
 
@@ -493,11 +494,16 @@ mutable struct History
     priors::Dict{String,Rating}
     forward_message::Dict{String,Rating}
     backward_message::Dict{String,Gaussian}
-    last_time::Dict{String,Int64}
+    last_time::Dict{String,Int64}#No hay que guardarlo
     batches::Vector{Batch}
     agents::Set{String}
     partake::Dict{String,Dict{Int64,Batch}}
-    function History(events::Vector{Vector{Vector{String}}},results::Vector{Vector{Int64}},times::Vector{Int64}=[],priors::Dict{String,Rating}=Dict{String,Rating}())
+    sigma::Float64
+    beta::Float64
+    gamma::Float64
+    epsilon::Float64
+    iterations::Int64
+    function History(events::Vector{Vector{Vector{String}}},results::Vector{Vector{Int64}},times::Vector{Int64}=Int64[],priors::Dict{String,Rating}=Dict{String,Rating}(), sigma::Float64=SIGMA, beta::Float64=BETA, gamma::Float64=GAMMA, epsilon::Float64=EPSILON, iterations::Int64=ITER, draw_probability::Float64=DRAW_PROBABILITY)
         history_requirements(events,results,times)
         agents = Set(vcat((events...)...))
         forward_message = copy(priors)
@@ -513,17 +519,17 @@ end
 Base.length(h::History) = h.size
 Base.show(io::IO, h::History) = print("History(Size=", h.size
                                      ,", Batches=", length(h.batches)
-                                     ,", Agents=", length(h.agents), ")")
+                                    ,", Agents=", length(h.agents), ")")
 function trueskill(h::History, events::Vector{Vector{Vector{String}}},results::Vector{Vector{Int64}})
     o = length(h.times)>0 ? sortperm(h.times) : [i for i in 1:length(events)]
     i = 1::Int64
     while i <= length(h)
-        j, t = i, length(h.times) == 0 ? 2 : h.times[o[i]]
+        j, t = i, length(h.times) == 0 ? 1 : h.times[o[i]]
         while ((length(h.times)>0) & (j < length(h)) && (h.times[o[j+1]] == t)) j += 1 end
         b = Batch(events[o[i:j]],results[o[i:j]], t, h.last_time, h.forward_message)        
         push!(h.batches,b)
         for a in b.agents
-            h.last_time[a] = t
+            h.last_time[a] = t-1
             h.partake[a][t] = b
             h.forward_message[a] = forward_prior_out(b,a)
         end

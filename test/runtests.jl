@@ -144,6 +144,11 @@ using JLD2
         end
         
     end
+    @testset "Forget" begin
+        r = ttt.Rating(25.,1e-7)
+        @test isapprox(ttt.forget(r,5).N.sigma,6.25)
+        @test isapprox(ttt.forget(r,1).N.sigma,1.25)
+    end
     @testset "Batch" begin
         @testset "One event each" begin
             b = ttt.Batch([ [["a"],["b"]], [["c"],["d"]] , [["e"],["f"]] ], [[0,1],[1,0],[0,1]], 2)
@@ -172,6 +177,7 @@ using JLD2
             events = [ [["aa"],["b"]], [["aa"],["c"]] , [["b"],["c"]] ]
             results = [[0,1],[1,0],[0,1]]
             h = ttt.History(events, results, [1,2,3])
+
             
             @test !(h.batches[1].max_step > 1e-6) & !(h.batches[2].max_step > 1e-6)
             @test isapprox(ttt.posterior(h.batches[1],"aa"),ttt.Gaussian(29.205,7.19448),1e-3)
@@ -210,13 +216,16 @@ using JLD2
         @testset "TrueSkill Through Time" begin
             events = [ [["a"],["b"]], [["a"],["c"]] , [["b"],["c"]] ]
             results = [[0,1],[1,0],[0,1]]
-            h = ttt.History(events, results, [1,2,3])
+            h = ttt.History(events, results)
             step , iter = ttt.convergence(h)
+            ttt.posterior(h.batches[1],"b").mu
+            ttt.posterior(h.batches[1],"b").sigma
             ttt.posterior(h.batches[3],"b").mu
             ttt.posterior(h.batches[3],"b").sigma
             @test isapprox(ttt.posterior(h.batches[1],"a"),ttt.Gaussian(25.0002673,5.41950697),1e-5)
             @test isapprox(ttt.posterior(h.batches[1],"b"),ttt.Gaussian(24.9986633,5.41968377),1e-5)
             @test isapprox(ttt.posterior(h.batches[3],"b"),ttt.Gaussian(25.0029304,5.42076739),1e-5)            
+            
         end
         @testset "Learning curves" begin
             events = [ [["aj"],["bj"]],[["bj"],["cj"]], [["cj"],["aj"]] ]
