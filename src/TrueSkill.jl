@@ -6,7 +6,7 @@ module TrueSkill
 global const MU = 25.0::Float64
 global const SIGMA = (MU/3)::Float64
 global const BETA = (SIGMA / 2)::Float64
-global const GAMMA = (SIGMA / 100)::Float64
+global const GAMMA = 0.15*SIGMA ::Float64
 global const DRAW_PROBABILITY = 0.0::Float64
 global const EPSILON = 1e-6::Float64
 global const sqrt2 = sqrt(2)
