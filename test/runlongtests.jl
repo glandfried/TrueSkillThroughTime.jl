@@ -50,8 +50,8 @@ using DataFrames
                   ,evidence = evidence)
     
     CSV.write("runlongtest_data.csv", df; header=true)
-    @save "ogs_estimations.jld2" w_mean b_mean w_std b_std h_mean h_std evidence
-    @save "ogs_history.jld2" h
+    #@save "ogs_estimations.jld2" w_mean b_mean w_std b_std h_mean h_std evidence
+    #@save "ogs_history.jld2" h
     
     
     
