@@ -416,11 +416,11 @@ function iteration(b::Batch)
         _priors = within_priors(b,e)
         teams = b.events[e]
                 
-        for t in 1:length(teams)
-            for j in 1:length(teams[t])
-                b.old_within_prior[teams[t][j]][e] = _priors[t][j].N
-            end
-        end
+        #for t in 1:length(teams)
+        #    for j in 1:length(teams[t])
+        #        b.old_within_prior[teams[t][j]][e] = _priors[t][j].N
+        #    end
+        #end
         
         g = Game(_priors, b.results[e])
         
@@ -457,9 +457,9 @@ function step_within_prior(b::Batch)
 end
 function convergence(b::Batch, epsilon::Float64=EPSILON)
     iter = 0::Int64    
-    while (b.max_step > epsilon) & (iter < 10)
+    while (iter < 4)#& (b.max_step > epsilon)
         iteration(b)
-        b.max_step = step_within_prior(b)
+        #b.max_step = step_within_prior(b)
         iter += 1
     end
     return iter
