@@ -14,12 +14,13 @@ using DataFrames
         prior_dict[string(h_key)] = ttt.Rating(0.,25.0/3.,0.,1.0/100)
     end
     results = [row.black_win == 1 ? [1,0] : [0, 1] for row in eachrow(data) ]
-    composition = [ r.handicap<2 ? [[string(r.white)],[string(r.black)]] : [[string(r.white)],[string(r.black),string((r.handicap,r.width))]] for r in eachrow(data) ]   
-    times = Vector{Int64}()
+    events = [ r.handicap<2 ? [[string(r.white)],[string(r.black)]] : [[string(r.white)],[string(r.black),string((r.handicap,r.width))]] for r in eachrow(data) ]   
+    times = [0 for _ in 1:length(events)]
+    #times = Vector{Int64}()
     
     println(now())
     
-    h = ttt.History(composition, results, times , prior_dict)
+    h = ttt.History(events, results, times , prior_dict)
     
     println(now())
     

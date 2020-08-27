@@ -383,7 +383,6 @@ mutable struct Batch
             end
         end
         iteration(b)
-        b.max_step = step_within_prior(b)
         return b
     end
 end
@@ -416,11 +415,11 @@ function iteration(b::Batch)
         _priors = within_priors(b,e)
         teams = b.events[e]
                 
-        #for t in 1:length(teams)
-        #    for j in 1:length(teams[t])
-        #        b.old_within_prior[teams[t][j]][e] = _priors[t][j].N
-        #    end
-        #end
+        for t in 1:length(teams)
+            for j in 1:length(teams[t])
+                b.old_within_prior[teams[t][j]][e] = _priors[t][j].N
+            end
+        end
         
         g = Game(_priors, b.results[e])
         
@@ -432,6 +431,7 @@ function iteration(b::Batch)
         
         b.evidences[e] = g.evidence
     end
+    #b.max_step = step_within_prior(b)
 end
 function forward_prior_out(b::Batch, agent::String)
     res = copy(b.prior_forward[agent])
@@ -445,38 +445,38 @@ function backward_prior_out(b::Batch, agent::String)
     # TODO: DOCUMENTAR porque
     return N+Gaussian(0., gamma*b.elapsed[agent] ) 
 end
-function step_within_prior(b::Batch)
-    step = (0.,0.)::Tuple{Float64,Float64}
-    for (a, events) in b.partake
-        if length(events) > 0
-        for e in events        
-            step = max(step, delta(b.old_within_prior[a][e],within_prior(b, a, e).N))
-        end end 
-    end
-    return step
-end
-function convergence(b::Batch, epsilon::Float64=EPSILON)
-    iter = 0::Int64    
-    while (iter < 4)#& (b.max_step > epsilon)
-        iteration(b)
-        #b.max_step = step_within_prior(b)
-        iter += 1
-    end
-    return iter
-end
+# function step_within_prior(b::Batch)
+#     step = (0.,0.)::Tuple{Float64,Float64}
+#     for (a, events) in b.partake
+#         if length(events) > 0
+#         for e in events        
+#             step = max(step, delta(b.old_within_prior[a][e],within_prior(b, a, e).N))
+#         end end 
+#     end
+#     return step
+# end
+# function convergence(b::Batch, epsilon::Float64=EPSILON)
+#     iter = 0::Int64    
+#     while (iter < 10) & (b.max_step > epsilon)
+#         iteration(b)
+#         b.max_step = step_within_prior(b)
+#         iter += 1
+#     end
+#     return iter
+# end
 function new_backward_info(b::Batch, backward_message::Dict{String,Gaussian})
     for a in b.agents#a="c"
         b.prior_backward[a] = haskey(backward_message, a) ? backward_message[a] : Ninf
     end
     b.max_step = (Inf, Inf)
-    return convergence(b)
+    return iteration(b)
 end
 function new_forward_info(b::Batch, forward_message::Dict{String,Rating})
     for a in b.agents
         b.prior_forward[a] = haskey(forward_message, a) ? forget(forward_message[a],b.elapsed[a]) : Rating(Nms)
     end
     b.max_step = (Inf, Inf)
-    return convergence(b)
+    return iteration(b)
 end
 
 function history_requirements(events::Vector{Vector{Vector{String}}},results::Vector{Vector{Int64}},times::Vector{Int64})
@@ -572,7 +572,7 @@ function convergence(h::History,epsilon::Float64=EPSILON,iterations::Int64=10)
         iter += 1
         println(", step = ", step)
     end
-    if (length(h.batches) == 1) convergence(h.batches[1]) end
+    if (length(h.batches) == 1) iteration(h.batches[1]) end
     println("End")
     return step, iter
 end
