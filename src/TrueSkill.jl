@@ -415,12 +415,12 @@ function iteration(b::Batch)
         _priors = within_priors(b,e)
         teams = b.events[e]
                 
-        for t in 1:length(teams)
-            for j in 1:length(teams[t])
-                b.old_within_prior[teams[t][j]][e] = _priors[t][j].N
-            end
-        end
-        
+#         for t in 1:length(teams)
+#             for j in 1:length(teams[t])
+#                 b.old_within_prior[teams[t][j]][e] = _priors[t][j].N
+#             end
+#         end
+#         
         g = Game(_priors, b.results[e])
         
         for t in 1:length(teams)
