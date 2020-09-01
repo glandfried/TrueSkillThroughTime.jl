@@ -530,7 +530,7 @@ function trueskill(h::History, events::Vector{Vector{Vector{String}}},results::V
         push!(h.batches,b)
         for a in b.agents
             h.last_time[a] = t-1
-            h.partake[a][t] = b
+            h.partake[a][t] = b # Problema sin baches, todos los t == 1
             h.forward_message[a] = forward_prior_out(b,a)
         end
         i = j + 1

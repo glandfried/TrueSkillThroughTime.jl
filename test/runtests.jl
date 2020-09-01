@@ -2,6 +2,8 @@ include("../src/TrueSkill.jl")
 using .TrueSkill
 global const ttt = TrueSkill
 using Test
+using CSV
+using DataFrames
 using JLD2
 
 @testset "Tests" begin
@@ -218,10 +220,6 @@ using JLD2
             results = [[0,1],[1,0],[0,1]]
             h = ttt.History(events, results)
             step , iter = ttt.convergence(h)
-            ttt.posterior(h.batches[1],"b").mu
-            ttt.posterior(h.batches[1],"b").sigma
-            ttt.posterior(h.batches[3],"b").mu
-            ttt.posterior(h.batches[3],"b").sigma
             @test isapprox(ttt.posterior(h.batches[1],"a"),ttt.Gaussian(25.0002673,5.41950697),1e-5)
             @test isapprox(ttt.posterior(h.batches[1],"b"),ttt.Gaussian(24.9986633,5.41968377),1e-5)
             @test isapprox(ttt.posterior(h.batches[3],"b"),ttt.Gaussian(25.0029304,5.42076739),1e-5)            
@@ -248,5 +246,102 @@ using JLD2
         @save "test_save.jld2" h
         lc = ttt.learning_curves(g)
     end
+    @testset "CSV Same strength" begin 
+        events = [ [["aj"],["bj"]],[["bj"],["cj"]], [["cj"],["aj"]] ,[["aj"],["bj"]],[["bj"],["cj"]], [["cj"],["aj"]]]
+        results = [[0,1],[0,1],[0,1],[0,1],[0,1],[0,1]]    
+        priors = Dict{String,ttt.Rating}()
+        for k in ["aj", "bj", "cj"]
+            priors[k] = ttt.Rating(0., 3., 0.5, 0.0, k ) 
+        end
+        h = ttt.History(events, results, [1,2,3,4,5,6], priors)
+        lc_ts = ttt.learning_curves(h)
+        ttt.convergence(h)
+        lc_ttt = ttt.learning_curves(h)
+        
+        df = DataFrame(mu_a_ts = [ N.mu for (k,N) in lc_ts["aj"]]
+                      ,sigma_a_ts = [ N.sigma for (k,N) in lc_ts["aj"]]
+                      ,mu_a_ttt = [ N.mu for (k,N) in lc_ttt["aj"]]
+                      ,sigma_a_ttt = [ N.sigma for (k,N) in  lc_ttt["aj"]]
+                      ,time_a = [ k for (k,N) in lc_ts["aj"]]
+                      ,mu_b_ts = [ N.mu for (k,N) in lc_ts["bj"]]
+                      ,sigma_b_ts = [ N.sigma for (k,N) in lc_ts["bj"]]
+                      ,mu_b_ttt = [ N.mu for (k,N) in lc_ttt["bj"]]
+                      ,sigma_b_ttt = [ N.sigma for (k,N) in lc_ttt["bj"]]
+                      ,time_b = [ k for (k,N) in lc_ts["bj"]]
+                      ,mu_c_ts = [ N.mu for (k,N) in lc_ts["cj"]]
+                      ,sigma_c_ts = [ N.sigma for (k,N) in lc_ts["cj"]]
+                      ,mu_c_ttt = [ N.mu for (k,N) in lc_ttt["cj"]]
+                      ,sigma_c_ttt = [ N.sigma for (k,N) in lc_ttt["cj"]]
+                      ,time_c = [ k for (k,N) in lc_ts["cj"]]
+                      )
+    
+        CSV.write("same_strength.csv", df; header=true)
+        @test true
+    end
+    @testset "CSV Same strength two groups" begin 
+        events = [ [["aj"],["bj"]],[["bj"],["cj"]], [["cj"],["aj"]] ,[["aj"],["bj"]],[["bj"],["cj"]], [["cj"],["aj"]] 
+                  ,[["ai"],["bi"]],[["bi"],["ci"]], [["ci"],["ai"]] ,[["ai"],["bi"]],[["bi"],["ci"]], [["ci"],["ai"]]
+                  , [["aj"],["ai"]], [["aj"],["ai"]], [["aj"],["ai"]], [["aj"],["ai"]], [["aj"],["ai"]], [["aj"],["ai"]]
+                  , [["aj"],["ai"]], [["aj"],["ai"]] ]
+        results = [[0,1],[0,1],[0,1],[0,1],[0,1],[0,1]
+                  ,[0,1],[0,1],[0,1],[0,1],[0,1],[0,1]
+                  , [0,1],[0,1],[1,0],[0,1],[0,1],[1,0],[0,1],[0,1]]    
+        priors = Dict{String,ttt.Rating}()
+        for k in ["aj", "bj", "cj", "ai", "bi", "ci"]
+            priors[k] = ttt.Rating(0., 3.0, 0.5, 0.0, k ) 
+        end
+        h = ttt.History(events, results, [1,2,3,4,5,6, 1,2,3,4,5,6, 7,7,7,7,7,7,7,7], priors)
+        lc_ts = ttt.learning_curves(h)
+        ttt.convergence(h)
+        lc_ttt = ttt.learning_curves(h)
+        1-ttt.cdf(lc_ttt["aj"][1][2] -lc_ttt["bj"][1][2],0.) 
+        1-ttt.cdf(lc_ttt["cj"][1][2] -lc_ttt["bj"][1][2],0.) 
+        
+        1-ttt.cdf(lc_ttt["ai"][1][2] -lc_ttt["bi"][1][2],0.) 
+        1-ttt.cdf(lc_ttt["ci"][1][2] -lc_ttt["bi"][1][2],0.) 
+        
+        1-ttt.cdf(lc_ttt["bj"][1][2] -lc_ttt["bi"][1][2],0.) 
+        1-ttt.cdf(lc_ttt["aj"][1][2] -lc_ttt["ai"][1][2],0.) 
+        
+        1-ttt.cdf(ttt.Gaussian(0.5,0.5),0.) 
+        1-ttt.cdf(ttt.Gaussian(0.33725,0.5),0.) 
+        
+        
+        df = DataFrame(mu_a_ts = [ N.mu for (k,N) in lc_ts["aj"] if k != 7]
+                      ,sigma_a_ts = [ N.sigma for (k,N) in lc_ts["aj"]  if k != 7]
+                      ,mu_a_ttt = [ N.mu for (k,N) in lc_ttt["aj"]  if k != 7]
+                      ,sigma_a_ttt = [ N.sigma for (k,N) in  lc_ttt["aj"]  if k != 7]
+                      ,time_a = [ k for (k,N) in lc_ts["aj"]  if k != 7]
+                      ,mu_b_ts = [ N.mu for (k,N) in lc_ts["bj"]]
+                      ,sigma_b_ts = [ N.sigma for (k,N) in lc_ts["bj"]]
+                      ,mu_b_ttt = [ N.mu for (k,N) in lc_ttt["bj"]]
+                      ,sigma_b_ttt = [ N.sigma for (k,N) in lc_ttt["bj"]]
+                      ,time_b = [ k for (k,N) in lc_ts["bj"]]
+                      ,mu_c_ts = [ N.mu for (k,N) in lc_ts["cj"]]
+                      ,sigma_c_ts = [ N.sigma for (k,N) in lc_ts["cj"]]
+                      ,mu_c_ttt = [ N.mu for (k,N) in lc_ttt["cj"]]
+                      ,sigma_c_ttt = [ N.sigma for (k,N) in lc_ttt["cj"]]
+                      ,time_c = [ k for (k,N) in lc_ts["cj"]]
+                      ,mu_ai_ts = [ N.mu for (k,N) in lc_ts["ai"] if k != 7]
+                      ,sigma_ai_ts = [ N.sigma for (k,N) in lc_ts["ai"]  if k != 7]
+                      ,mu_ai_ttt = [ N.mu for (k,N) in lc_ttt["ai"]  if k != 7]
+                      ,sigma_ai_ttt = [ N.sigma for (k,N) in  lc_ttt["ai"]  if k != 7]
+                      ,time_ai = [ k for (k,N) in lc_ts["ai"]  if k != 7]
+                      ,mu_bi_ts = [ N.mu for (k,N) in lc_ts["bi"]]
+                      ,sigma_bi_ts = [ N.sigma for (k,N) in lc_ts["bi"]]
+                      ,mu_bi_ttt = [ N.mu for (k,N) in lc_ttt["bi"]]
+                      ,sigma_bi_ttt = [ N.sigma for (k,N) in lc_ttt["bi"]]
+                      ,time_bi = [ k for (k,N) in lc_ts["bi"]]
+                      ,mu_ci_ts = [ N.mu for (k,N) in lc_ts["ci"]]
+                      ,sigma_ci_ts = [ N.sigma for (k,N) in lc_ts["ci"]]
+                      ,mu_ci_ttt = [ N.mu for (k,N) in lc_ttt["ci"]]
+                      ,sigma_ci_ttt = [ N.sigma for (k,N) in lc_ttt["ci"]]
+                      ,time_ci = [ k for (k,N) in lc_ts["ci"]]
+                      )
+    
+        CSV.write("same_strength_two_groups.csv", df; header=true)
+        @test true
+    end
+    
 end
 
