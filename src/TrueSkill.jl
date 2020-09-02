@@ -389,7 +389,7 @@ end
 
 Base.show(io::IO, b::Batch) = print("Batch(time=", b.time, ", events=", b.events, ", results=", b.results,")")
 Base.length(b::Batch) = length(b.results)
-function likelihood(b::Batch, agent::String)   
+function likelihood(b::Batch, agent::String)#agent="a"
     return prod([value for (_, value) in b.likelihood[agent]])
 end
 function posterior(b::Batch, agent::String)
@@ -411,16 +411,16 @@ function within_priors(b::Batch, event::Int64)
     return [[within_prior(b, a, event) for a in team] for team in b.events[event]]
 end
 function iteration(b::Batch)
-    for e in 1:length(b)
+    for e in 1:length(b)#e=1
         _priors = within_priors(b,e)
         teams = b.events[e]
                 
-#         for t in 1:length(teams)
-#             for j in 1:length(teams[t])
-#                 b.old_within_prior[teams[t][j]][e] = _priors[t][j].N
-#             end
-#         end
-#         
+        for t in 1:length(teams)
+            for j in 1:length(teams[t])
+                b.old_within_prior[teams[t][j]][e] = _priors[t][j].N
+            end
+        end
+        
         g = Game(_priors, b.results[e])
         
         for t in 1:length(teams)
@@ -433,7 +433,7 @@ function iteration(b::Batch)
     end
     #b.max_step = step_within_prior(b)
 end
-function forward_prior_out(b::Batch, agent::String)
+function forward_prior_out(b::Batch, agent::String)#agent="b"
     res = copy(b.prior_forward[agent])
     res.N *= likelihood(b,agent)
     return res
@@ -445,25 +445,25 @@ function backward_prior_out(b::Batch, agent::String)
     # TODO: DOCUMENTAR porque
     return N+Gaussian(0., gamma*b.elapsed[agent] ) 
 end
-# function step_within_prior(b::Batch)
-#     step = (0.,0.)::Tuple{Float64,Float64}
-#     for (a, events) in b.partake
-#         if length(events) > 0
-#         for e in events        
-#             step = max(step, delta(b.old_within_prior[a][e],within_prior(b, a, e).N))
-#         end end 
-#     end
-#     return step
-# end
-# function convergence(b::Batch, epsilon::Float64=EPSILON)
-#     iter = 0::Int64    
-#     while (iter < 10) & (b.max_step > epsilon)
-#         iteration(b)
-#         b.max_step = step_within_prior(b)
-#         iter += 1
-#     end
-#     return iter
-# end
+function step_within_prior(b::Batch)
+    step = (0.,0.)::Tuple{Float64,Float64}
+    for (a, events) in b.partake
+        if length(events) > 0
+        for e in events        
+            step = max(step, delta(b.old_within_prior[a][e],within_prior(b, a, e).N))
+        end end 
+    end
+    return step
+end
+function convergence(b::Batch, epsilon::Float64=EPSILON)
+    iter = 0::Int64    
+    while (iter < 10) & (b.max_step > epsilon)
+        iteration(b)
+        b.max_step = step_within_prior(b)
+        iter += 1
+    end
+    return iter
+end
 function new_backward_info(b::Batch, backward_message::Dict{String,Gaussian})
     for a in b.agents#a="c"
         b.prior_backward[a] = haskey(backward_message, a) ? backward_message[a] : Ninf
@@ -543,32 +543,35 @@ function diff(old::Dict{String,Gaussian}, new::Dict{String,Gaussian})
     end
     return step
 end
+function iteration(h::History)
+    step = (0., 0.)
+    h.backward_message=Dict{String,Gaussian}()
+    for j in length(h.batches)-1:-1:1# j=3
+        for a in h.batches[j+1].agents# a = "c"
+            h.backward_message[a] = backward_prior_out(h.batches[j+1],a)
+        end
+        old = copy(posteriors(h.batches[j]))
+        new_backward_info(h.batches[j], h.backward_message)
+        step = max(step, diff(old, posteriors(h.batches[j])))
+    end
+    
+    h.forward_message=copy(h.priors)
+    for j in 2:length(h.batches)#j=2
+        for a in h.batches[j-1].agents#a = "b"
+            h.forward_message[a] = forward_prior_out(h.batches[j-1],a)
+        end
+        old = copy(posteriors(h.batches[j]))
+        new_forward_info(h.batches[j], h.forward_message)
+        step = max(step, diff(old, posteriors(h.batches[j])))
+    end
+    return step
+end
 function convergence(h::History,epsilon::Float64=EPSILON,iterations::Int64=10)
     step = (Inf, Inf)::Tuple{Float64,Float64}
     iter = 1::Int64
     while (step > epsilon) & (iter <= iterations)
-        step = (0., 0.)
         print("Iteration = ", iter)
-        
-        h.backward_message=Dict{String,Gaussian}()
-        for j in length(h.batches)-1:-1:1# j=2
-            for a in h.batches[j+1].agents# a = "c"
-                h.backward_message[a] = backward_prior_out(h.batches[j+1],a)
-            end
-            old = copy(posteriors(h.batches[j]))
-            new_backward_info(h.batches[j], h.backward_message)
-            step = max(step, diff(old, posteriors(h.batches[j])))
-        end
-        
-        h.forward_message=copy(h.priors)
-        for j in 2:length(h.batches)#j=2
-            for a in h.batches[j-1].agents#a = "b"
-                h.forward_message[a] = forward_prior_out(h.batches[j-1],a)
-            end
-            old = copy(posteriors(h.batches[j]))
-            new_forward_info(h.batches[j], h.forward_message)
-            step = max(step, diff(old, posteriors(h.batches[j])))
-        end
+        step = iteration(h)
         iter += 1
         println(", step = ", step)
     end
@@ -583,17 +586,53 @@ function learning_curves(h::History)
     end
     return res
 end
-
-
-if false
-
-    events = [ [["a"],["b"]], [["a"],["c"]] , [["b"],["c"]] ]
-    results = [[0,1],[1,0],[0,1]]
-    times = [1,2,3]
-    h = History(events, results, times)
-            
-
+function log_evidence(h::History)
+   return sum([log(e) for b in h.batches for e in b.evidences])
+end
     
+if false
+    
+    events = [ [["a"],["b"]], [["a"],["b"]]]
+    results = [[0,1],[1,0]]
+    times = [1,2]
+    priors = Dict{String,Rating}()
+    for k in ["a", "b"]
+        priors[k] = Rating(0., 3.0, 0.5, 0.0, k ) 
+    end
+    h = History(events, results, times, priors)
+    fp_a = Vector{Gaussian}()
+    bp_a = Vector{Gaussian}() 
+    lh_a = Vector{Gaussian}()
+    
+    push!(fp_a, h.batches[1].prior_forward["a"].N)
+    push!(bp_a, h.batches[1].prior_backward["a"])
+    push!(lh_a, h.batches[1].likelihood["a"][1])
+    for _ in 1:10
+        iteration(h)
+        push!(fp_a, h.batches[1].prior_forward["a"].N)
+        push!(bp_a, h.batches[1].prior_backward["a"])
+        push!(lh_a, h.batches[1].likelihood["a"][1])
+    end
+    
+    
+    events = [ [["a"],["b"]], [["b"],["c"]] , [["c"],["a"]] ]
+    results = [[0,1],[0,1],[0,1]]
+    times = [1,2,3]
+    priors = Dict{String,Rating}()
+    for k in ["a", "b", "c"]
+        priors[k] = Rating(0., 3.0, 0.5, 0.0, k ) 
+    end
+    
+    h = History(events, results, times, priors)
+    convergence(h)
+    evs = [e for b in h.batches for e in b.evidences]        
+    learning_curves(h)
+    b = h.batches[1]
+    Nbeta = Gaussian(0.,0.5)
+    
+    (b.likelihood["b"][1]*Gaussian(0.,3.))
+    diff_ = (h.batches[1].likelihood["b"][1]*Gaussian(0.,3.))*(Ninf)+Nbeta - (Gaussian(0.,3.0)*h.batches[3].likelihood["c"][1])+Nbeta
+    1 - cdf(diff_,0.)
     #
     # Sin TESTEAR. TTT-D
     #
