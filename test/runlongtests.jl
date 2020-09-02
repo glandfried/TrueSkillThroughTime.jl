@@ -15,8 +15,8 @@ using DataFrames
     end
     results = [row.black_win == 1 ? [1,0] : [0, 1] for row in eachrow(data) ]
     events = [ r.handicap<2 ? [[string(r.white)],[string(r.black)]] : [[string(r.white)],[string(r.black),string((r.handicap,r.width))]] for r in eachrow(data) ]   
-    times = [0 for _ in 1:length(events)]
-    #times = Vector{Int64}()
+    #times = [0 for _ in 1:length(events)] # To test batch performance
+    times = Vector{Int64}()
     
     println(now())
     
