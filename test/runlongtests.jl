@@ -22,11 +22,19 @@ using DataFrames
     
     h = ttt.History(events, results, times , prior_dict)
     
+    ts_log_evidence = ttt.log_evidence(h)
+    
     println(now())
     
     ttt.convergence(h)
     
+    ttt_log_evidence = ttt.log_evidence(h)
+    
     println(now())
+    
+    print("TS: ", ts_log_evidence, ", TTT:", ttt_log_evidence)
+    
+    @test ts_log_evidence < ttt_log_evidence
     
     w_mean = [ ttt.posterior(h.batches[r], string(data[r,"white"])).mu for r in 1:size(data)[1]]                                                            
     b_mean = [ ttt.posterior(h.batches[r], string(data[r,"black"])).mu  for r in 1:size(data)[1]]                                                            
