@@ -568,6 +568,12 @@ function iteration(h::History)
         new_forward_info(h.batches[j], h.forward_message)
         step = max(step, diff(old, posteriors(h.batches[j])))
     end
+    
+    if (length(h.batches) == 1)
+        iteration(h.batches[1])
+        step = step_within_prior(h.batches[1])
+    end
+        
     return step
 end
 function convergence(h::History, epsilon::Float64=EPSILON, iterations::Int64=10, )
@@ -579,7 +585,6 @@ function convergence(h::History, epsilon::Float64=EPSILON, iterations::Int64=10,
         iter += 1
         println(", step = ", step)
     end
-    if (length(h.batches) == 1) iteration(h.batches[1]) end
     println("End")
     return step, iter
 end
@@ -594,10 +599,5 @@ function log_evidence(h::History)
    return sum([log(e) for b in h.batches for e in b.evidences])
 end
 
-if false
-    b = Batch([ [["a"],["c"]], [["c"],["d"]] , [["e"],["f"]] ], [[0,1],[0,1],[0,1]], 2)
-    b.max_step
-    convergence(b)
-end
  
 end # module

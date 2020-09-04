@@ -195,21 +195,25 @@ using Test
             bache = [1,1,1]
             h1 = ttt.History(composition,results, bache)
             # TrueSkill
-            @test isapprox(ttt.posterior(h1.batches[1],"aj"),ttt.Gaussian(22.904,6.010),2)
-            @test isapprox(ttt.posterior(h1.batches[1],"cj"),ttt.Gaussian(25.110,5.866),2)
+            @test isapprox(ttt.posterior(h1.batches[1],"aj"),ttt.Gaussian(22.904,6.010),1e-3)
+            @test isapprox(ttt.posterior(h1.batches[1],"cj"),ttt.Gaussian(25.110,5.866),1e-3)
             # TTT
             step , i = ttt.convergence(h1)
-            @test isapprox(ttt.posterior(h1.batches[1],"aj"),ttt.Gaussian(25.000,5.419),2)
-            @test isapprox(ttt.posterior(h1.batches[1],"cj"),ttt.Gaussian(25.000,5.419),2)
+            @test isapprox(ttt.posterior(h1.batches[1],"aj"),ttt.Gaussian(25.000,5.419),1e-3)
+            @test isapprox(ttt.posterior(h1.batches[1],"cj"),ttt.Gaussian(25.000,5.419),1e-3)
             
-            h2 = ttt.History(composition,results, [1,2,3])
+            priors = Dict{String,ttt.Rating}()
+            for k in ["aj", "bj", "cj"]
+                priors[k] = ttt.Rating(25., 25.0/3, 25.0/6, 25.0/300, k ) 
+            end
+            h2 = ttt.History(composition,results, [1,2,3], priors  )
             # TrueSkill
-            @test isapprox(ttt.posterior(h2.batches[3],"aj"),ttt.Gaussian(22.904,6.012),2)
-            @test isapprox(ttt.posterior(h2.batches[3],"cj"),ttt.Gaussian(25.110,5.867),2)
+            @test isapprox(ttt.posterior(h2.batches[3],"aj"),ttt.Gaussian(22.902,6.012),1e-3)
+            @test isapprox(ttt.posterior(h2.batches[3],"cj"),ttt.Gaussian(25.110,5.867),1e-3)
             # TTT
             step , i = ttt.convergence(h2)
-            @test isapprox(ttt.posterior(h2.batches[3],"aj"),ttt.Gaussian(24.997,5.421),2)
-            @test isapprox(ttt.posterior(h2.batches[3],"cj"),ttt.Gaussian(25.000,5.420),2)
+            @test isapprox(ttt.posterior(h2.batches[3],"aj"),ttt.Gaussian(24.997,5.421),1e-3)
+            @test isapprox(ttt.posterior(h2.batches[3],"cj"),ttt.Gaussian(25.000,5.420),1e-3)
         end
         @testset "TrueSkill Through Time" begin
             events = [ [["a"],["b"]], [["a"],["c"]] , [["b"],["c"]] ]
@@ -230,14 +234,18 @@ using Test
         @testset "Learning curves" begin
             events = [ [["aj"],["bj"]],[["bj"],["cj"]], [["cj"],["aj"]] ]
             results = [[0,1],[0,1],[0,1]]    
-            h = ttt.History(events, results, [5,6,7])
+            priors = Dict{String,ttt.Rating}()
+            for k in ["aj", "bj", "cj"]
+                priors[k] = ttt.Rating(25., 25.0/3, 25.0/6, 25.0/300, k ) 
+            end
+            h = ttt.History(events, results, [5,6,7], priors)
             ttt.convergence(h)
             lc = ttt.learning_curves(h)
             
             @test lc["aj"][1][1] == 5
             @test lc["aj"][end][1] == 7
-            @test isapprox(lc["aj"][end][2],ttt.Gaussian(24.997,5.421),2)
-            @test isapprox(lc["cj"][end][2],ttt.Gaussian(25.000,5.420),2)
+            @test isapprox(lc["aj"][end][2],ttt.Gaussian(24.997,5.421),1e-3)
+            @test isapprox(lc["cj"][end][2],ttt.Gaussian(25.000,5.420),13-3)
         end
     end        
 end
