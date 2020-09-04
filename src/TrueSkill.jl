@@ -343,7 +343,8 @@ mutable struct Batch
     elapsed::Dict{String,Int64}
     prior_forward::Dict{String,Rating}
     prior_backward::Dict{String,Gaussian}
-    likelihood::Dict{String,Dict{Int64,Gaussian}}
+    likelihoods::Dict{String,Dict{Int64,Gaussian}}
+    likelihood::Dict{String,Gaussian}
     old_within_prior::Dict{String,Dict{Int64,Gaussian}}
     evidences::Vector{Float64}
     partake::Dict{String,Vector{Int64}}
@@ -359,6 +360,7 @@ mutable struct Batch
                    ,Dict{String,Rating}()
                    ,Dict{String,Gaussian}()
                    ,Dict{String,Dict{Int64,Gaussian}}()
+                   ,Dict{String,Gaussian}()
                    ,Dict{String,Dict{Int64,Gaussian}}()
                    ,[0.0 for _ in 1:length(events)]
                    ,Dict{String,Vector{Int64}}()
@@ -368,17 +370,18 @@ mutable struct Batch
         b.agents = Set(vcat((b.events...)...))
         for a in b.agents#a="c"
             b.partake[a] = [e for e in 1:length(b.events) for team in b.events[e] if a in team ]
-            b.elapsed[a] = haskey(last_time, a) ? (time - last_time[a]) : 0
+            b.elapsed[a] = !haskey(last_time, a) ? 0 : ( last_time[a] == -1 ? 1 : (time - last_time[a]) )
             if !haskey(priors, a)
                 b.prior_forward[a] = Rating(Nms,BETA,GAMMA,a)
             else 
                 b.prior_forward[a] = forget(priors[a],b.elapsed[a])
             end
             b.prior_backward[a] = Ninf
-            b.likelihood[a] = Dict{Int64,Gaussian}()
+            b.likelihoods[a] = Dict{Int64,Gaussian}()
+            b.likelihood[a] = Ninf
             b.old_within_prior[a] = Dict{Int64,Gaussian}()
             for e in b.partake[a]
-                b.likelihood[a][e] = Ninf
+                b.likelihoods[a][e] = Ninf
                 b.old_within_prior[a][e] = b.prior_forward[a].N
             end
         end
@@ -389,11 +392,8 @@ end
 
 Base.show(io::IO, b::Batch) = print("Batch(time=", b.time, ", events=", b.events, ", results=", b.results,")")
 Base.length(b::Batch) = length(b.results)
-function likelihood(b::Batch, agent::String)#agent="a"
-    return prod([value for (_, value) in b.likelihood[agent]])
-end
 function posterior(b::Batch, agent::String)
-    return likelihood(b, agent)*b.prior_backward[agent]*b.prior_forward[agent].N   
+    return b.likelihood[agent]*b.prior_backward[agent]*b.prior_forward[agent].N   
 end
 function posteriors(b::Batch)
     res = Dict{String,Gaussian}()
@@ -404,7 +404,7 @@ function posteriors(b::Batch)
 end
 function within_prior(b::Batch, agent::String, event::Int64)
     res = copy(b.prior_forward[agent])
-    res.N = posterior(b,agent)/b.likelihood[agent][event]
+    res.N = posterior(b,agent)/b.likelihoods[agent][event]
     return res
 end
 function within_priors(b::Batch, event::Int64)
@@ -425,22 +425,23 @@ function iteration(b::Batch)
         
         for t in 1:length(teams)
             for j in 1:length(teams[t])
-                b.likelihood[teams[t][j]][e] = g.likelihoods[t][j] 
+                b.likelihood[teams[t][j]] = (b.likelihood[teams[t][j]] / b.likelihoods[teams[t][j]][e]) * g.likelihoods[t][j]
+                b.likelihoods[teams[t][j]][e] = g.likelihoods[t][j]
             end
         end
         
         b.evidences[e] = g.evidence
     end
-    #b.max_step = step_within_prior(b)
+    b.max_step = step_within_prior(b)
 end
 function forward_prior_out(b::Batch, agent::String)#agent="b"
     res = copy(b.prior_forward[agent])
-    res.N *= likelihood(b,agent)
+    res.N *= b.likelihood[agent]
     return res
 end
 function backward_prior_out(b::Batch, agent::String)
     gamma = b.prior_forward[agent].gamma
-    N = likelihood(b,agent)*b.prior_backward[agent]
+    N = b.likelihood[agent]*b.prior_backward[agent]
     # IMPORTANTE: No usar forget ac\'a
     # TODO: DOCUMENTAR porque
     return N+Gaussian(0., gamma*b.elapsed[agent] ) 
@@ -524,12 +525,12 @@ function trueskill(h::History, events::Vector{Vector{Vector{String}}},results::V
     o = length(h.times)>0 ? sortperm(h.times) : [i for i in 1:length(events)]
     i = 1::Int64
     while i <= length(h)
-        j, t = i, length(h.times) == 0 ? 1 : h.times[o[i]]
+        j, t = i, length(h.times) == 0 ? i : h.times[o[i]]
         while ((length(h.times)>0) & (j < length(h)) && (h.times[o[j+1]] == t)) j += 1 end
         b = Batch(events[o[i:j]],results[o[i:j]], t, h.last_time, h.forward_message)        
         push!(h.batches,b)
         for a in b.agents
-            h.last_time[a] = t-1
+            h.last_time[a] = length(h.times) == 0 ? -1 : t
             h.partake[a][t] = b # Problema sin baches, todos los t == 1
             h.forward_message[a] = forward_prior_out(b,a)
         end
@@ -630,7 +631,7 @@ if false
     b = h.batches[1]
     Nbeta = Gaussian(0.,0.5)
     
-    (b.likelihood["b"][1]*Gaussian(0.,3.))
+    (b.likelihoods["b"][1]*Gaussian(0.,3.))
     diff_ = (h.batches[1].likelihood["b"][1]*Gaussian(0.,3.))*(Ninf)+Nbeta - (Gaussian(0.,3.0)*h.batches[3].likelihood["c"][1])+Nbeta
     1 - cdf(diff_,0.)
     #

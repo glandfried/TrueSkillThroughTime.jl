@@ -8,7 +8,7 @@ using Dates
 using DataFrames
 
 @testset "Test OGS" begin
-    data = CSV.read("summary_filtered.csv")    
+    data = CSV.read("data/summary_filtered.csv")    
     prior_dict = Dict{String,ttt.Rating}()
     for h_key in Set([(row.handicap, row.width) for row in eachrow(data) ])
         prior_dict[string(h_key)] = ttt.Rating(0.,25.0/3.,0.,1.0/100)
@@ -58,11 +58,7 @@ using DataFrames
                   ,h_std = h_std
                   ,evidence = evidence)
     
-    CSV.write("runlongtest_data.csv", df; header=true)
-    #@save "ogs_estimations.jld2" w_mean b_mean w_std b_std h_mean h_std evidence
-    #@save "ogs_history.jld2" h
-    
-    
+    CSV.write("data/longtest_output.csv", df; header=true)
     
 end
 
