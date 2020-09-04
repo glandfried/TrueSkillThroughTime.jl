@@ -3,6 +3,7 @@ using .TrueSkill
 global const ttt = TrueSkill
 using Test
 
+
 @testset "Tests" begin
     @testset "ppf" begin
         @test isapprox(ttt.ppf(ttt.N01,0.3),-0.52440044)
@@ -178,7 +179,7 @@ using Test
             
             @test !(h.batches[1].max_step > 1e-6) & !(h.batches[2].max_step > 1e-6)
             @test isapprox(ttt.posterior(h.batches[1],"aa"),ttt.Gaussian(29.205,7.19448),1e-3)
-
+            
             observed = h.batches[2].prior_forward["aa"].N.sigma 
             expected = sqrt((ttt.GAMMA*1)^2 +  ttt.posterior(h.batches[1],"aa").sigma^2)
             @test isapprox(observed, expected)
@@ -224,7 +225,7 @@ using Test
             @test isapprox(ttt.posterior(h.batches[1],"a"),ttt.Gaussian(25.0002673,5.41938162),1e-5)
             @test isapprox(ttt.posterior(h.batches[1],"b"),ttt.Gaussian(24.999465,5.419425831),1e-5)
             @test isapprox(ttt.posterior(h.batches[3],"b"),ttt.Gaussian(25.00053219,5.419696790),1e-5)
-            ttt.learning_curves(h)
+            #ttt.learning_curves(h)
         end
         @testset "Learning curves" begin
             events = [ [["aj"],["bj"]],[["bj"],["cj"]], [["cj"],["aj"]] ]
