@@ -104,13 +104,14 @@ using DataFrames
         priors = Dict{String,ttt.Rating}()
         Nbeta = ttt.Gaussian(0.,0.5)
         for k in ["a", "b"]
-            priors[k] = ttt.Rating(0., 10., 0.5, 0.0, k ) 
+            priors[k] = ttt.Rating(0., 3., 0.5, 0.0, k ) 
         end
         h = ttt.History(events, results, times, priors)
         fp_a_1 = Vector{ttt.Gaussian}()
         bp_a_1 = Vector{ttt.Gaussian}() 
         lh_a_1 = Vector{ttt.Gaussian}()
         wp_a_1 = Vector{ttt.Gaussian}()
+
         fp_a_2 = Vector{ttt.Gaussian}()
         bp_a_2 = Vector{ttt.Gaussian}() 
         lh_a_2 = Vector{ttt.Gaussian}()
@@ -123,6 +124,10 @@ using DataFrames
         wp_b_2 = Vector{ttt.Gaussian}()
         
         p_a_1 =  Vector{ttt.Gaussian}()
+        p_a_2 =  Vector{ttt.Gaussian}()
+        p_b_1 =  Vector{ttt.Gaussian}()
+        p_b_2 =  Vector{ttt.Gaussian}()
+        
         
         e_1 = Float64[]
         e_2 = Float64[]
@@ -131,46 +136,54 @@ using DataFrames
         
         push!(fp_a_1, h.batches[1].prior_forward["a"].N)
         push!(bp_a_1, h.batches[1].prior_backward["a"])
-        push!(lh_a_1, h.batches[1].likelihoods["a"][1])
+        push!(lh_a_1, h.batches[1].likelihoods[1][1][1])
         push!(wp_a_1, fp_a_1[end]*bp_a_1[end])
-        push!(p_a_1, wp_a_1[end]*lh_a_1[end])
         push!(wp_b_1, h.batches[1].prior_forward["b"].N*h.batches[1].prior_backward["b"])
         push!(fp_a_2, h.batches[2].prior_forward["a"].N)
         push!(bp_a_2, h.batches[2].prior_backward["a"])
-        push!(lh_a_2, h.batches[2].likelihoods["a"][1])
+        push!(lh_a_2, h.batches[2].likelihoods[1][1][1])
         push!(wp_a_2, fp_a_2[end]*bp_a_2[end])
         push!(wp_b_2, h.batches[2].prior_forward["b"].N*h.batches[2].prior_backward["b"])
         push!(e_1, h.batches[1].evidences[1])
         push!(e_2, h.batches[2].evidences[1])
-        push!(lh_b_1, h.batches[1].likelihoods["b"][1])
-        push!(lh_b_2, h.batches[2].likelihoods["b"][1])
+        push!(lh_b_1, h.batches[1].likelihoods[1][2][1])
+        push!(lh_b_2, h.batches[2].likelihoods[1][2][1])
+        
+        push!(p_a_1, wp_a_1[end]*lh_a_1[end])
+        push!(p_a_2, wp_a_2[end]*lh_a_2[end])
+        push!(p_b_1, wp_b_1[end]*lh_b_1[end])
+        push!(p_b_2, wp_b_2[end]*lh_b_2[end])
+        
         
         d_1 = wp_a_1[end]+Nbeta - wp_b_1[end]+Nbeta 
         push!(d_div_1 , ttt.trunc(d_1,0.,false)/d_1)
         d_2 = wp_a_1[end]+Nbeta - wp_b_1[end]+Nbeta 
         push!(d_div_2 , ttt.trunc(d_2,0.,false)/d_2)
         
-        for _ in 1:20
+        for _ in 1:10
             ttt.iteration(h)
             push!(fp_a_1, h.batches[1].prior_forward["a"].N)
             push!(bp_a_1, h.batches[1].prior_backward["a"])
-            push!(lh_a_1, h.batches[1].likelihoods["a"][1])
+            push!(lh_a_1, h.batches[1].likelihoods[1][1][1])
             push!(wp_a_1, fp_a_1[end]*bp_a_1[end])
-            push!(p_a_1, wp_a_1[end]*lh_a_1[end])
             push!(wp_b_1, h.batches[1].prior_forward["b"].N*h.batches[1].prior_backward["b"])
             push!(fp_a_2, h.batches[2].prior_forward["a"].N)
             push!(bp_a_2, h.batches[2].prior_backward["a"])
-            push!(lh_a_2, h.batches[2].likelihoods["a"][1])
+            push!(lh_a_2, h.batches[2].likelihoods[1][1][1])
             push!(wp_a_2, fp_a_2[end]*bp_a_2[end])
             push!(wp_b_2, h.batches[2].prior_forward["b"].N*h.batches[2].prior_backward["b"])
             push!(e_1, h.batches[1].evidences[1])
             push!(e_2, h.batches[2].evidences[1])
-            push!(lh_b_1, h.batches[1].likelihoods["b"][1])
-            push!(lh_b_2, h.batches[2].likelihoods["b"][1])
+            push!(lh_b_1, h.batches[1].likelihoods[1][2][1])
+            push!(lh_b_2, h.batches[2].likelihoods[1][2][1])
             d_1 = wp_a_1[end]+Nbeta - wp_b_1[end]+Nbeta 
             push!(d_div_1 , ttt.trunc(d_1,0.,false)/d_1)
             d_2 = wp_a_1[end]+Nbeta - wp_b_1[end]+Nbeta 
             push!(d_div_2 , ttt.trunc(d_2,0.,false)/d_2)
+            push!(p_a_1, wp_a_1[end]*lh_a_1[end])
+            push!(p_a_2, wp_a_2[end]*lh_a_2[end])
+            push!(p_b_1, wp_b_1[end]*lh_b_1[end])
+            push!(p_b_2, wp_b_2[end]*lh_b_2[end])
         end
         
         df = DataFrame(fp_a_1_mu = [N.mu for N in fp_a_1]
@@ -183,6 +196,12 @@ using DataFrames
                       ,wp_a_1_sigma = [N.sigma for N in wp_a_1]
                       ,p_a_1_mu = [N.mu for N in p_a_1]
                       ,p_a_1_sigma = [N.sigma for N in p_a_1]
+                      ,p_a_2_mu = [N.mu for N in p_a_2]
+                      ,p_a_2_sigma = [N.sigma for N in p_a_2]
+                      ,p_b_1_mu = [N.mu for N in p_b_1]
+                      ,p_b_1_sigma = [N.sigma for N in p_b_1]
+                      ,p_b_2_mu = [N.mu for N in p_b_2]
+                      ,p_b_2_sigma = [N.sigma for N in p_b_2]
                       ,wp_b_1_mu = [N.mu for N in wp_b_1]
                       ,wp_b_1_sigma = [N.sigma for N in wp_b_1]
                       ,fp_a_2_mu = [N.mu for N in fp_a_2]
