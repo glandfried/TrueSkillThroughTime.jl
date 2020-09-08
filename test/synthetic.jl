@@ -40,60 +40,53 @@ using DataFrames
         @test true
     end
     @testset "synthetic/same_strength_two_groups.csv" begin 
-        events = [ [["aj"],["bj"]],[["bj"],["cj"]], [["cj"],["aj"]] ,[["aj"],["bj"]],[["bj"],["cj"]], [["cj"],["aj"]] 
-                  ,[["ai"],["bi"]],[["bi"],["ci"]], [["ci"],["ai"]] ,[["ai"],["bi"]],[["bi"],["ci"]], [["ci"],["ai"]]
-                  , [["aj"],["ai"]], [["aj"],["ai"]], [["aj"],["ai"]], [["aj"],["ai"]], [["aj"],["ai"]], [["aj"],["ai"]]
-                  , [["aj"],["ai"]], [["aj"],["ai"]] ]
-        results = [[0,1],[0,1],[0,1],[0,1],[0,1],[0,1]
-                  ,[0,1],[0,1],[0,1],[0,1],[0,1],[0,1]
-                  , [0,1],[0,1],[1,0],[0,1],[0,1],[1,0],[0,1],[0,1]]    
-        priors = Dict{String,ttt.Rating}()
-        for k in ["aj", "bj", "cj", "ai", "bi", "ci"]
-            priors[k] = ttt.Rating(0., 3.0, 0.5, 0.0, k ) 
-        end
-        h = ttt.History(events, results, [1,2,3,4,5,6, 1,2,3,4,5,6, 7,7,7,7,7,7,7,7], priors)
-        trueSkill_evidence = ttt.log_evidence(h)
-        lc_ts = ttt.learning_curves(h)
-        ttt.convergence(h)
-        throughTime = ttt.log_evidence(h)
-        evs = [e for b in h.batches for e in b.evidences]
-        lc_ttt = ttt.learning_curves(h)
-        
-        # Predicciones
+        predicciones_mle = Float64[] 
+        predicciones_aiaj = Float64[] 
+        predicciones_bibj = Float64[] 
+        predicciones_aibi = Float64[] 
+        predicciones_bici = Float64[] 
+        predicciones_ajbj = Float64[] 
+        predicciones_bjcj = Float64[] 
+        events = [ [["aj"],["bj"]], [["bj"],["cj"]], [["cj"],["aj"]],[["aj"],["bj"]], [["bj"],["cj"]], [["cj"],["aj"]],
+                   [["ai"],["bi"]], [["bi"],["ci"]], [["ci"],["ai"]], [["ai"],["bi"]], [["bi"],["ci"]], [["ci"],["ai"]],
+                   [["ai"],["aj"]] ]
+        results = [[0,1],[0,1],[0,1],[0,1],[0,1],[0,1], [0,1],[0,1],[0,1],[0,1],[0,1],[0,1], [1,0]]    
+        batches = [1,1,1,1,1,1,1,1,1,1,1,1,1]
         Nbeta = ttt.Gaussian(0.0,0.5)
-        
-        df = DataFrame(mu_a_ts = [ N.mu for (k,N) in lc_ts["aj"] if k != 7]
-                      ,sigma_a_ts = [ N.sigma for (k,N) in lc_ts["aj"]  if k != 7]
-                      ,mu_a_ttt = [ N.mu for (k,N) in lc_ttt["aj"]  if k != 7]
-                      ,sigma_a_ttt = [ N.sigma for (k,N) in  lc_ttt["aj"]  if k != 7]
-                      ,time_a = [ k for (k,N) in lc_ts["aj"]  if k != 7]
-                      ,mu_b_ts = [ N.mu for (k,N) in lc_ts["bj"]]
-                      ,sigma_b_ts = [ N.sigma for (k,N) in lc_ts["bj"]]
-                      ,mu_b_ttt = [ N.mu for (k,N) in lc_ttt["bj"]]
-                      ,sigma_b_ttt = [ N.sigma for (k,N) in lc_ttt["bj"]]
-                      ,time_b = [ k for (k,N) in lc_ts["bj"]]
-                      ,mu_c_ts = [ N.mu for (k,N) in lc_ts["cj"]]
-                      ,sigma_c_ts = [ N.sigma for (k,N) in lc_ts["cj"]]
-                      ,mu_c_ttt = [ N.mu for (k,N) in lc_ttt["cj"]]
-                      ,sigma_c_ttt = [ N.sigma for (k,N) in lc_ttt["cj"]]
-                      ,time_c = [ k for (k,N) in lc_ts["cj"]]
-                      ,mu_ai_ts = [ N.mu for (k,N) in lc_ts["ai"] if k != 7]
-                      ,sigma_ai_ts = [ N.sigma for (k,N) in lc_ts["ai"]  if k != 7]
-                      ,mu_ai_ttt = [ N.mu for (k,N) in lc_ttt["ai"]  if k != 7]
-                      ,sigma_ai_ttt = [ N.sigma for (k,N) in  lc_ttt["ai"]  if k != 7]
-                      ,time_ai = [ k for (k,N) in lc_ts["ai"]  if k != 7]
-                      ,mu_bi_ts = [ N.mu for (k,N) in lc_ts["bi"]]
-                      ,sigma_bi_ts = [ N.sigma for (k,N) in lc_ts["bi"]]
-                      ,mu_bi_ttt = [ N.mu for (k,N) in lc_ttt["bi"]]
-                      ,sigma_bi_ttt = [ N.sigma for (k,N) in lc_ttt["bi"]]
-                      ,time_bi = [ k for (k,N) in lc_ts["bi"]]
-                      ,mu_ci_ts = [ N.mu for (k,N) in lc_ts["ci"]]
-                      ,sigma_ci_ts = [ N.sigma for (k,N) in lc_ts["ci"]]
-                      ,mu_ci_ttt = [ N.mu for (k,N) in lc_ttt["ci"]]
-                      ,sigma_ci_ttt = [ N.sigma for (k,N) in lc_ttt["ci"]]
-                      ,time_ci = [ k for (k,N) in lc_ts["ci"]]
+            
+        for i in 1:20
+            push!(events, [["ai"],["aj"]])
+            push!(results, [0,1])
+            push!(batches, 1)
+            priors = Dict{String,ttt.Rating}()
+            for k in ["aj", "bj", "cj", "ai", "bi", "ci"]
+                priors[k] = ttt.Rating(0., 5.0, 0.5, 0.0, k ) 
+            end
+            
+            h = ttt.History(events, results, batches, priors)
+            ttt.convergence(h)
+            ttt.convergence(h)
+            ttt.convergence(h)
+            ttt.convergence(h)
+            
+            lc = ttt.learning_curves(h)
+            
+            push!(predicciones_mle, i/(1.0+i))
+            
+            push!(predicciones_aiaj, 1-ttt.cdf(lc["ai"][1][2]+Nbeta - lc["aj"][1][2]+Nbeta, 0.))
+            push!(predicciones_bibj, 1-ttt.cdf(lc["bi"][1][2]+Nbeta - lc["bj"][1][2]+Nbeta, 0.))
+            push!(predicciones_aibi, 1-ttt.cdf(lc["ai"][1][2]+Nbeta - lc["bi"][1][2]+Nbeta, 0.))
+            push!(predicciones_bici, 1-ttt.cdf(lc["bi"][1][2]+Nbeta - lc["ci"][1][2]+Nbeta, 0.))
+            push!(predicciones_ajbj, 1-ttt.cdf(lc["aj"][1][2]+Nbeta - lc["bj"][1][2]+Nbeta, 0.))
+            push!(predicciones_bjcj, 1-ttt.cdf(lc["bj"][1][2]+Nbeta - lc["cj"][1][2]+Nbeta, 0.))
+        end
+        df = DataFrame(mle = predicciones_mle
+                      ,aiaj = predicciones_aiaj
+                      ,bibj = predicciones_bibj
+                      ,aibi = predicciones_aibi
+                      ,bici = predicciones_bici
                       )
-    
+        
         CSV.write("synthetic/same_strength_two_groups.csv", df; header=true)
         @test true
     end
@@ -267,4 +260,69 @@ using DataFrames
         CSV.write("synthetic/ttt_vs_ts.csv", df; header=true)
         @test true
     end
+    @testset "Best gamma" begin
+        
+        function skill(exp::Int64, alpha::Float64=0.133)
+            return exp^alpha - 1
+        end
+        mean_agent = [skill(i) for i in 1:1000] 
+        beta = 0.5
+        
+        using Random
+        Random.seed!(1)
+        
+        mean_target = [(Random.randn(1)[1]*beta + skill(i)) for i in 1:1000] 
+        perf_target = [(Random.randn(1)[1]*beta + mean_target[i]) for i in 1:1000] 
+        perf_agent = [(Random.randn(1)[1]*beta + mean_target[i]) for i in 1:1000] 
+        events = [ [["a"], [string(i)] ] for i in 1:1000]
+        results = [ perf_agent[i] > perf_target[i] ? [0,1] : [1,0] for i in 1:1000 ]
+        batches= [i for i in 1:1000 ]
+        
+    
+        selected_gammas = [0.005,0.01,0.015,0.02,0.025]
+        
+        gammas = [gamma for gamma in 0.001:0.001:0.04]
+        evidencias_ts = Float64[]
+        evidencias_ttt = Float64[]
+        learning_curves = Vector{Vector{Float64}}()
+        for gamma in gammas#gamma=0.015
+            
+            priors = Dict{String,ttt.Rating}()
+            priors["a"] = ttt.Rating(0., 3.0, beta, gamma, "a") 
+            for k in 1:1000
+                priors[string(k)] = ttt.Rating(mean_target[k], 0.5, beta, 0.0, string(k) ) 
+            end
+            h = ttt.History(events, results, batches, priors)
+            push!(evidencias_ts, ttt.log_evidence(h))
+            ttt.convergence(h)
+            push!(evidencias_ttt, ttt.log_evidence(h))
+            if gamma in selected_gammas
+                push!(learning_curves, [r.mu for (t, r) in ttt.learning_curves(h)["a"]] )
+            end
+        end
+        #using Plots
+        #plot([g for g in gammas ],evidencias_ts)
+        #plot!([g for g in gammas ] ,evidencias_ttt)
+        
+        @test 0.015 == gammas[argmax(evidencias_ttt)]
+    
+        
+        df = DataFrame(gammas = gammas
+                      ,evidencias_ts = evidencias_ts
+                      ,evidencias_ttt = evidencias_ttt)
+        CSV.write("synthetic/best_gamma-evidences.csv", df; header=true)
+       
+        df = DataFrame(mean_agent = mean_agent 
+                      ,lc_005 = learning_curves[1]
+                      ,lc_01  = learning_curves[2]
+                      ,lc_015 = learning_curves[3]
+                      ,lc_020 = learning_curves[4]
+                      ,lc_025 = learning_curves[5])
+        CSV.write("synthetic/best_gamma-learning_curves.csv", df; header=true)
+       
+        #plot(mean_agent)
+        #plot!(learning_curves[3])
+    end
+            
+    
 end

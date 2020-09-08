@@ -189,7 +189,10 @@ end
 Base.show(io::IO, r::Rating) = print("Rating(", round(r.N.mu,digits=3)," ,", round(r.N.sigma,digits=3), ")")
 Base.copy(r::Rating) = Rating(r.N,r.beta,r.gamma,r.name)
 function forget(R::Rating, t::Int64, max_sigma::Float64=SIGMA)
-    _sigma = min(sqrt(R.N.sigma^2 + (R.gamma*t)^2), max_sigma)
+    if t < 0
+        println("Elapsed < 0")
+    end
+    _sigma = sqrt(R.N.sigma^2 + (R.gamma*t)^2)
     return Rating(Gaussian(R.N.mu, _sigma),R.beta,R.gamma,R.name)
 end 
 function performance(R::Rating)
