@@ -168,132 +168,164 @@ using Test
         end
     end
     @testset "Forget" begin
-        r = ttt.Rating(25.,1e-7,25.0/6,0.15*25.0/3)
-        @test isapprox(ttt.forget(r,5).N.sigma,6.25)
-        @test isapprox(ttt.forget(r,1).N.sigma,1.25)
+        gamma = 0.15*25.0/3
+        r = ttt.Rating(25.,1e-7,25.0/6,gamma)
+        @test isapprox(ttt.forget(r,5).N.sigma,sqrt(5*gamma^2))
+        @test isapprox(ttt.forget(r,1).N.sigma,sqrt(1*gamma^2))
     end
-    @testset "Batch" begin
-        @testset "One event each" begin
-            priors = Dict{String,ttt.Rating}()
-            for k in ["a", "b", "c", "d", "e", "f"]
-                priors[k] = ttt.Rating(25., 25.0/3, 25.0/6, 25.0/300, k ) 
-            end
-            events = [ [["a"],["b"]], [["c"],["d"]] , [["e"],["f"]] ]
-            results = [[0,1],[1,0],[0,1]]
-            b = ttt.Batch(events = events, results = results, priors = priors)
-            @test isapprox(ttt.posterior(b,"a"),ttt.Gaussian(29.205,7.194),1e-3)
-            @test isapprox(ttt.posterior(b,"b"),ttt.Gaussian(20.795,7.194),1e-3)
-            @test isapprox(ttt.posterior(b,"d"),ttt.Gaussian(29.205,7.194),1e-3)
-            @test isapprox(ttt.posterior(b,"c"),ttt.Gaussian(20.795,7.194),1e-3)
-            @test isapprox(ttt.posterior(b,"e"),ttt.Gaussian(29.205,7.194),1e-3)
-            @test isapprox(ttt.posterior(b,"f"),ttt.Gaussian(20.795,7.194),1e-3)
-            iter = ttt.convergence(b)
-            @test iter == 0
+    @testset "One event each" begin
+        priors = Dict{String,ttt.Rating}()
+        for k in ["a", "b", "c", "d", "e", "f"]
+            priors[k] = ttt.Rating(25., 25.0/3, 25.0/6, 25.0/300, k ) 
         end
-        @testset "Same strength" begin
-            priors = Dict{String,ttt.Rating}()
-            for k in ["a", "b", "c", "d", "e", "f"]
-                priors[k] = ttt.Rating(25., 25.0/3, 25.0/6, 25.0/300, k ) 
-            end
-            events = [ [["a"],["b"]], [["a"],["c"]] , [["b"],["c"]] ]
-            results = [[0,1],[1,0],[0,1]]
-            b = ttt.Batch(events = events, results = results, priors = priors)
-            @test isapprox(ttt.posterior(b,"a"),ttt.Gaussian(24.96097,6.29954),1e-3)
-            @test isapprox(ttt.posterior(b,"b"),ttt.Gaussian(27.09559,6.01033),1e-3)
-            @test isapprox(ttt.posterior(b,"c"),ttt.Gaussian(24.88968,5.86631),1e-3)
-            iter = ttt.convergence(b)
-            @test isapprox(ttt.posterior(b,"a"),ttt.Gaussian(25.000,5.419),1e-3)
-            @test isapprox(ttt.posterior(b,"b"),ttt.Gaussian(25.000,5.419),1e-3)
-            @test isapprox(ttt.posterior(b,"c"),ttt.Gaussian(25.000,5.419),1e-3)
-        end
+        events = [ [["a"],["b"]], [["c"],["d"]] , [["e"],["f"]] ]
+        results = [[0,1],[1,0],[0,1]]
+        b = ttt.Batch(events = events, results = results, priors = priors)
+        @test isapprox(ttt.posterior(b,"a"),ttt.Gaussian(29.205,7.194),1e-3)
+        @test isapprox(ttt.posterior(b,"b"),ttt.Gaussian(20.795,7.194),1e-3)
+        @test isapprox(ttt.posterior(b,"d"),ttt.Gaussian(29.205,7.194),1e-3)
+        @test isapprox(ttt.posterior(b,"c"),ttt.Gaussian(20.795,7.194),1e-3)
+        @test isapprox(ttt.posterior(b,"e"),ttt.Gaussian(29.205,7.194),1e-3)
+        @test isapprox(ttt.posterior(b,"f"),ttt.Gaussian(20.795,7.194),1e-3)
+        iter = ttt.convergence(b)
+        @test iter == 0
     end
-    @testset "History" begin
-        @testset "TrueSkill initalization" begin
-            events = [ [["aa"],["b"]], [["aa"],["c"]] , [["b"],["c"]] ]
-            results = [[0,1],[1,0],[0,1]]
-            priors = Dict{String,ttt.Rating}()
-            for k in ["aa", "b", "c"]
-                priors[k] = ttt.Rating(25., 25.0/3, 25.0/6, 0.15*25.0/3, k ) 
-            end
-            
-            h = ttt.History(events, results, [1,2,3], priors)
-            
-            @test !(h.batches[1].max_step > 1e-6) & !(h.batches[2].max_step > 1e-6)
-            @test isapprox(ttt.posterior(h.batches[1],"aa"),ttt.Gaussian(29.205,7.19448),1e-3)
-            
-            observed = h.batches[2].prior_forward["aa"].N.sigma 
-            gamma = 0.15*25.0/3
-            expected = sqrt((gamma*1)^2 +  ttt.posterior(h.batches[1],"aa").sigma^2)
-            @test isapprox(observed, expected)
-            
-            observed = ttt.posterior(h.batches[2],"aa")
-            g = ttt.Game([[h.batches[2].prior_forward["aa"]],[h.batches[2].prior_forward["c"]]],[1,0])
-            expected = ttt.posteriors(g)[1][1]
-            @test isapprox(observed, expected, 1e-7)
+    @testset "Same strength" begin
+        priors = Dict{String,ttt.Rating}()
+        for k in ["a", "b", "c", "d", "e", "f"]
+            priors[k] = ttt.Rating(25., 25.0/3, 25.0/6, 25.0/300, k ) 
         end
-        @testset "One-batch history" begin
-            composition = [ [["aj"],["bj"]],[["bj"],["cj"]], [["cj"],["aj"]] ]
-            results = [[0,1],[0,1],[0,1]]
-            bache = [1,1,1]
-            priors = Dict{String,ttt.Rating}()
-            for k in ["aj", "bj", "cj"]
-                priors[k] = ttt.Rating(25., 25.0/3, 25.0/6, 0.15*25.0/3, k ) 
-            end
-            
-            h1 = ttt.History(composition,results, bache, priors)
-            # TrueSkill
-            @test isapprox(ttt.posterior(h1.batches[1],"aj"),ttt.Gaussian(22.904,6.010),1e-3)
-            @test isapprox(ttt.posterior(h1.batches[1],"cj"),ttt.Gaussian(25.110,5.866),1e-3)
-            # TTT
-            step , i = ttt.convergence(h1)
-            @test isapprox(ttt.posterior(h1.batches[1],"aj"),ttt.Gaussian(25.000,5.419),1e-3)
-            @test isapprox(ttt.posterior(h1.batches[1],"cj"),ttt.Gaussian(25.000,5.419),1e-3)
-            
-            priors = Dict{String,ttt.Rating}()
-            for k in ["aj", "bj", "cj"]
-                priors[k] = ttt.Rating(25., 25.0/3, 25.0/6, 25.0/300, k ) 
-            end
-            h2 = ttt.History(composition,results, [1,2,3], priors  )
-            # TrueSkill
-            @test isapprox(ttt.posterior(h2.batches[3],"aj"),ttt.Gaussian(22.902,6.012),1e-3)
-            @test isapprox(ttt.posterior(h2.batches[3],"cj"),ttt.Gaussian(25.110,5.867),1e-3)
-            # TTT
-            step , i = ttt.convergence(h2)
-            @test isapprox(ttt.posterior(h2.batches[3],"aj"),ttt.Gaussian(24.997,5.421),1e-3)
-            @test isapprox(ttt.posterior(h2.batches[3],"cj"),ttt.Gaussian(25.000,5.420),1e-3)
+        events = [ [["a"],["b"]], [["a"],["c"]] , [["b"],["c"]] ]
+        results = [[0,1],[1,0],[0,1]]
+        b = ttt.Batch(events = events, results = results, priors = priors)
+        @test isapprox(ttt.posterior(b,"a"),ttt.Gaussian(24.96097,6.29954),1e-3)
+        @test isapprox(ttt.posterior(b,"b"),ttt.Gaussian(27.09559,6.01033),1e-3)
+        @test isapprox(ttt.posterior(b,"c"),ttt.Gaussian(24.88968,5.86631),1e-3)
+        iter = ttt.convergence(b)
+        @test isapprox(ttt.posterior(b,"a"),ttt.Gaussian(25.000,5.419),1e-3)
+        @test isapprox(ttt.posterior(b,"b"),ttt.Gaussian(25.000,5.419),1e-3)
+        @test isapprox(ttt.posterior(b,"c"),ttt.Gaussian(25.000,5.419),1e-3)
+    end
+    @testset "TrueSkill initalization" begin
+        events = [ [["aa"],["b"]], [["aa"],["c"]] , [["b"],["c"]] ]
+        results = [[0,1],[1,0],[0,1]]
+        priors = Dict{String,ttt.Rating}()
+        for k in ["aa", "b", "c"]
+            priors[k] = ttt.Rating(25., 25.0/3, 25.0/6, 0.15*25.0/3, k ) 
         end
-        @testset "TrueSkill Through Time" begin
-            events = [ [["a"],["b"]], [["a"],["c"]] , [["b"],["c"]] ]
-            results = [[0,1],[1,0],[0,1]]
-            priors = Dict{String,ttt.Rating}()
-            for k in ["a", "b", "c"]
-                priors[k] = ttt.Rating(25., 25.0/3, 25.0/6, 25.0/300, k ) 
-            end
-            
-            h = ttt.History(events, results, Int64[], priors)
-            step , iter = ttt.convergence(h)
-            @test (h.batches[3].elapsed["b"] == 1) & (h.batches[3].elapsed["c"] == 1)
-            @test isapprox(ttt.posterior(h.batches[1],"a"),ttt.Gaussian(25.0002673,5.41938162),1e-5)
-            @test isapprox(ttt.posterior(h.batches[1],"b"),ttt.Gaussian(24.999465,5.419425831),1e-5)
-            @test isapprox(ttt.posterior(h.batches[3],"b"),ttt.Gaussian(25.00053219,5.419696790),1e-5)
-            #ttt.learning_curves(h)
+        
+        h = ttt.History(events, results, [1,2,3], priors)
+        
+        @test !(h.batches[1].max_step > 1e-6) & !(h.batches[2].max_step > 1e-6)
+        @test isapprox(ttt.posterior(h.batches[1],"aa"),ttt.Gaussian(29.205,7.19448),1e-3)
+        
+        observed = h.batches[2].prior_forward["aa"].N.sigma 
+        gamma = 0.15*25.0/3
+        expected = sqrt((gamma*1)^2 +  ttt.posterior(h.batches[1],"aa").sigma^2)
+        @test isapprox(observed, expected)
+        
+        observed = ttt.posterior(h.batches[2],"aa")
+        g = ttt.Game([[h.batches[2].prior_forward["aa"]],[h.batches[2].prior_forward["c"]]],[1,0])
+        expected = ttt.posteriors(g)[1][1]
+        @test isapprox(observed, expected, 1e-7)
+    end
+    @testset "One-batch history" begin
+        composition = [ [["aj"],["bj"]],[["bj"],["cj"]], [["cj"],["aj"]] ]
+        results = [[0,1],[0,1],[0,1]]
+        times = [1,1,1]
+        priors = Dict{String,ttt.Rating}()
+        for k in ["aj", "bj", "cj"]
+            priors[k] = ttt.Rating(25., 25.0/3, 25.0/6, 0.15*25.0/3, k ) 
         end
-        @testset "Learning curves" begin
-            events = [ [["aj"],["bj"]],[["bj"],["cj"]], [["cj"],["aj"]] ]
-            results = [[0,1],[0,1],[0,1]]    
-            priors = Dict{String,ttt.Rating}()
-            for k in ["aj", "bj", "cj"]
-                priors[k] = ttt.Rating(25., 25.0/3, 25.0/6, 25.0/300, k ) 
-            end
-            h = ttt.History(events, results, [5,6,7], priors)
-            ttt.convergence(h)
-            lc = ttt.learning_curves(h)
-            
-            @test lc["aj"][1][1] == 5
-            @test lc["aj"][end][1] == 7
-            @test isapprox(lc["aj"][end][2],ttt.Gaussian(24.997,5.421),1e-3)
-            @test isapprox(lc["cj"][end][2],ttt.Gaussian(25.000,5.420),13-3)
+        
+        h1 = ttt.History(composition,results, times, priors)
+        # TrueSkill
+        @test isapprox(ttt.posterior(h1.batches[1],"aj"),ttt.Gaussian(22.904,6.010),1e-3)
+        @test isapprox(ttt.posterior(h1.batches[1],"cj"),ttt.Gaussian(25.110,5.866),1e-3)
+        # TTT
+        step , i = ttt.convergence(h1)
+        @test isapprox(ttt.posterior(h1.batches[1],"aj"),ttt.Gaussian(25.000,5.419),1e-3)
+        @test isapprox(ttt.posterior(h1.batches[1],"cj"),ttt.Gaussian(25.000,5.419),1e-3)
+        
+        priors = Dict{String,ttt.Rating}()
+        for k in ["aj", "bj", "cj"]
+            priors[k] = ttt.Rating(25., 25.0/3, 25.0/6, 25.0/300, k ) 
         end
-    end        
+        h2 = ttt.History(composition,results, [1,2,3], priors  )
+        # TrueSkill
+        @test isapprox(ttt.posterior(h2.batches[3],"aj"),ttt.Gaussian(22.904,6.011),1e-3)
+        @test isapprox(ttt.posterior(h2.batches[3],"cj"),ttt.Gaussian(25.111,5.867),1e-3)
+        # TTT
+        step , i = ttt.convergence(h2)
+        @test isapprox(ttt.posterior(h2.batches[3],"aj"),ttt.Gaussian(24.999,5.420),1e-3)
+        @test isapprox(ttt.posterior(h2.batches[3],"cj"),ttt.Gaussian(25.001,5.420),1e-3)
+    end
+    @testset "TrueSkill Through Time" begin
+        events = [ [["a"],["b"]], [["a"],["c"]] , [["b"],["c"]] ]
+        results = [[0,1],[1,0],[0,1]]
+        priors = Dict{String,ttt.Rating}()
+        for k in ["a", "b", "c"]
+            priors[k] = ttt.Rating(25., 25.0/3, 25.0/6, 25.0/300, k ) 
+        end
+        
+        h = ttt.History(events, results, Int64[], priors)
+        step , iter = ttt.convergence(h)
+        @test (h.batches[3].elapsed["b"] == 1) & (h.batches[3].elapsed["c"] == 1)
+        @test isapprox(ttt.posterior(h.batches[1],"a"),ttt.Gaussian(25.0002673,5.41938162),1e-5)
+        @test isapprox(ttt.posterior(h.batches[1],"b"),ttt.Gaussian(24.999465,5.419425831),1e-5)
+        @test isapprox(ttt.posterior(h.batches[3],"b"),ttt.Gaussian(25.00053219,5.419696790),1e-5)
+        #ttt.learning_curves(h)
+    end
+    @testset "Env TTT" begin
+        events = [ [["a"],["b"]], [["a"],["c"]] , [["b"],["c"]] ]
+        results = [[0,1],[1,0],[0,1]]
+        env = ttt.Environment(mu=25.,sigma=25.0/3, beta=25.0/6, gamma=25.0/300)
+        
+        h = ttt.History(events=events, results=results, env=env)
+        step , iter = ttt.convergence(h)
+        @test (h.batches[3].elapsed["b"] == 1) & (h.batches[3].elapsed["c"] == 1)
+        @test isapprox(ttt.posterior(h.batches[1],"a"),ttt.Gaussian(25.0002673,5.41938162),1e-5)
+        @test isapprox(ttt.posterior(h.batches[1],"b"),ttt.Gaussian(24.999465,5.419425831),1e-5)
+        @test isapprox(ttt.posterior(h.batches[3],"b"),ttt.Gaussian(25.00053219,5.419696790),1e-5)
+    end
+    @testset "Env 0 TTT" begin
+        events = [ [["a"],["b"]], [["a"],["c"]] , [["b"],["c"]] ]
+        results = [[0,1],[1,0],[0,1]]
+        env = ttt.Environment(mu=0.0,sigma=6.0, beta=1.0, gamma=0.05, iter=100)
+        
+        h = ttt.History(events=events, results=results, env=env)
+        step , iter = ttt.convergence(h)
+        @test (h.batches[3].elapsed["b"] == 1) & (h.batches[3].elapsed["c"] == 1)
+        @test isapprox(ttt.posterior(h.batches[1],"a"),ttt.Gaussian( 0.001,2.395),1e-3)
+        @test isapprox(ttt.posterior(h.batches[1],"b"),ttt.Gaussian(-0.001,2.396),1e-3)
+        @test isapprox(ttt.posterior(h.batches[3],"b"),ttt.Gaussian( 0.001,2.396),1e-3)
+    end
+    @testset "Env 0 TTT" begin
+        events = [ [["a"],["b"]], [["a"],["c"]] , [["b"],["c"]] ]
+        results = [[0,1],[1,0],[0,1]]
+        env = ttt.Environment(mu=0.0,sigma=6.0, beta=1.0, gamma=0.05, iter=100)
+        
+        h = ttt.History(events=events, results=results, times = [0, 10, 20], env=env)
+        step , iter = ttt.convergence(h)
+        @test isapprox(ttt.posterior(h.batches[1],"a"),ttt.Gaussian( 0.005,2.404),1e-3)
+        @test isapprox(ttt.posterior(h.batches[1],"b"),ttt.Gaussian(-0.016,2.404),1e-3)
+        @test isapprox(ttt.posterior(h.batches[3],"b"),ttt.Gaussian( 0.017,2.406),1e-3)
+    end
+    @testset "Learning curves" begin
+        events = [ [["aj"],["bj"]],[["bj"],["cj"]], [["cj"],["aj"]] ]
+        results = [[0,1],[0,1],[0,1]]    
+        priors = Dict{String,ttt.Rating}()
+        for k in ["aj", "bj", "cj"]
+            priors[k] = ttt.Rating(25., 25.0/3, 25.0/6, 25.0/300, k ) 
+        end
+        h = ttt.History(events, results, [5,6,7], priors)
+        ttt.convergence(h)
+        lc = ttt.learning_curves(h)
+        
+        @test lc["aj"][1][1] == 5
+        @test lc["aj"][end][1] == 7
+        @test isapprox(lc["aj"][end][2],ttt.Gaussian(24.999,5.420),1e-3)
+        @test isapprox(lc["cj"][end][2],ttt.Gaussian(25.001,5.420),13-3)
+    end
 end
 

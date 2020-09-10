@@ -63,7 +63,7 @@ using DataFrames
                 priors[k] = ttt.Rating(0., 5.0, 0.5, 0.0, k ) 
             end
             
-            h = ttt.History(events, results, batches, priors)
+            h = ttt.History(events, results, batches, priors, ttt.Environment(iter=20))
             ttt.convergence(h)
             ttt.convergence(h)
             ttt.convergence(h)
@@ -323,6 +323,28 @@ using DataFrames
         #plot(mean_agent)
         #plot!(learning_curves[3])
     end
-            
-    
+    @testset "Chain of betas" begin
+        using Random
+        Random.seed!(1)
+        beta = 1.0
+        agents = [string(i) for i in -5:5]
+        true_skills = [i for i in -5.0:5.0] 
+        mu_prior = [ abs(i)==5.0 ? i : 0.0 for i in -5.0:5.0]
+        sigma_prior = [ abs(i)==5.0 ? 1e-7 : 6.0 for i in -5.0:5.0]
+        priors = Dict{String,ttt.Rating}()
+        for i in -5:5
+            priors[string(i)] = ttt.Rating(mu_prior[i+6], sigma_prior[i+6], beta, 0.0, string(i) ) 
+        end
+        
+        events = [ [[string(a-1)],[string(a)]]  for e in 1:100 for a in -4:5]
+        results = [ (Random.randn(1)[1]*beta + a-1) > (Random.randn(1)[1]*beta + a) ? [1,0] : [0,1] for i in 1:100 for a in -4.0:5.0] 
+        times = [ e  for e in 1:100 for a in -4:5]
+        h = ttt.History(events , results, times, priors, ttt.Environment(iter=100))
+        ttt.convergence(h)
+        diffs = [(ttt.posterior(h.batches[1],string(a))-ttt.posterior(h.batches[1],string(a-1))).mu for a in -3:4]
+        probs = [ 1-ttt.cdf(ttt.Gaussian(d,sqrt(2)),0.0)  for d in diffs]
+        for p in probs 
+            @test abs(1-ttt.cdf(ttt.Gaussian(1.0,sqrt(2)),0.0)-p) < 0.04
+        end
+    end
 end
