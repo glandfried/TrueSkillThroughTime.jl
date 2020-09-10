@@ -3,7 +3,7 @@ module TrueSkill
 #using Parameters
 #import SpecialFunctions
 
-global const MU = 25.0::Float64
+global const MU = 0.0::Float64
 global const SIGMA = (MU/3)::Float64
 global const BETA = (SIGMA / 2)::Float64
 global const GAMMA = 0.15*SIGMA ::Float64
@@ -13,7 +13,21 @@ global const ITER = 10::Int64
 global const sqrt2 = sqrt(2)
 global const sqrt2pi = sqrt(2*pi)
 
-
+struct Environment
+    beta::Float64
+    mu::Float64
+    sigma::Float64
+    gamma::Float64
+    p_draw::Float64
+    epsilon::Float64
+    iter::Int64
+    function Environment(mu::Float64=MU, sigma::Float64=SIGMA, beta::Float64=BETA, gamma::Float64=GAMMA, p_draw::Float64=P_DRAW, epsilon::Float64=EPSILON, iter::Int64=ITER )
+        return new(beta, mu, sigma, gamma, p_draw, epsilon, iter)
+    end
+    function Environment(;mu::Float64=MU, sigma::Float64=SIGMA, beta::Float64=BETA, gamma::Float64=GAMMA, p_draw::Float64=P_DRAW, epsilon::Float64=EPSILON, iter::Int64=ITER)
+        return new(beta, mu, sigma, gamma, p_draw, epsilon, iter)
+    end
+end
 function erfc(x::Float64)
     #"""Complementary error function (thanks to http://bit.ly/zOLqbc)"""
     z = abs(x)
@@ -169,9 +183,9 @@ end
 function Base.isapprox(N::Gaussian, M::Gaussian, atol::Real=0)
     return (abs(N.mu - M.mu) < atol) & (abs(N.sigma - M.sigma) < atol)
 end
-function compute_margin(draw_probability::Float64,size::Int64)
-    _N = Gaussian(0.0, sqrt(size)*BETA)
-    res = abs(ppf(_N, 0.5-draw_probability/2))
+function compute_margin(p_draw::Float64, sd::Float64)
+    _N = Gaussian(0.0, sd )
+    res = abs(ppf(_N, 0.5-p_draw/2))
     return res 
 end
 mutable struct Rating
@@ -291,7 +305,9 @@ function likelihood_teams(g::Game)
     t = [team_messages(performance(g,o[e]), Ninf, Ninf, Ninf) for e in 1:length(g)]
     d = [diff_messages(t[e].prior - t[e+1].prior, Ninf) for e in 1:length(g)-1]
     tie = [r[o[e]]==r[o[e+1]] for e in 1:length(d)]
-    margin = [ g.p_draw==0.0 ? 0.0 : compute_margin(g.p_draw, length(g.teams[e]) + length(g.teams[e+1])) for e in 1:length(d)] 
+    margin = [ g.p_draw==0.0 ?  0.0 :
+               compute_margin(g.p_draw, sqrt( sum([a.beta^2 for a in g.teams[o[e]]]) + sum([a.beta^2 for a in g.teams[o[e+1]]]) )) 
+               for e in 1:length(d)] 
     g.evidence = 1
     for e in 1:length(d)
         g.evidence *= !tie[e] ? 1-cdf(d[e].prior, margin[e]) : cdf(d[e].prior, margin[e])-cdf(d[e].prior, -margin[e])
@@ -347,9 +363,7 @@ mutable struct Batch
     max_step::Tuple{Float64, Float64}
     function Batch(events::Vector{Vector{Vector{String}}}, results::Vector{Vector{Int64}} 
                  ,time::Int64, last_time::Dict{String,Int64}=Dict{String,Int64}() , priors::Dict{String,Rating}=Dict{String,Rating}())
-        if length(events)!= length(results)
-            error("length(events)!= length(results)")
-        end
+        (length(events)!= length(results)) && throw(error("length(events)!= length(results)"))
         
         likelihoods = [ [ [Ninf for a in team ] for team in teams] for teams in events ]
         agents = Set(vcat((events...)...))
@@ -372,6 +386,10 @@ mutable struct Batch
         iteration(b)
         b.max_step = step_within_prior(b)
         return b
+    end
+    function Batch(;events::Vector{Vector{Vector{String}}}, results::Vector{Vector{Int64}} 
+                 ,time::Int64=0, last_time::Dict{String,Int64}=Dict{String,Int64}() , priors::Dict{String,Rating}=Dict{String,Rating}())
+        Batch(events, results, time, last_time, priors)
     end
 end
 
@@ -514,6 +532,9 @@ mutable struct History
         _h = new(length(events), times, priors, forward_message ,Dict{String,Gaussian}(), Dict{String,Int64}(), Vector{Batch}(), agents, partake)
         trueskill(_h, events, results)
         return _h
+    end
+    function History(;events::Vector{Vector{Vector{String}}},results::Vector{Vector{Int64}},times::Vector{Int64}=Int64[],priors::Dict{String,Rating}=Dict{String,Rating}(), sigma::Float64=SIGMA, beta::Float64=BETA, gamma::Float64=GAMMA, epsilon::Float64=EPSILON, iterations::Int64=ITER, draw_probability::Float64=P_DRAW)
+        History(events, results, times, priors, sigma, beta, gamma, epsilon, iterations, draw_probability)
     end
 end
 Base.length(h::History) = h.size
