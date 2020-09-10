@@ -7,11 +7,12 @@ global const MU = 25.0::Float64
 global const SIGMA = (MU/3)::Float64
 global const BETA = (SIGMA / 2)::Float64
 global const GAMMA = 0.15*SIGMA ::Float64
-global const DRAW_PROBABILITY = 0.0::Float64
+global const P_DRAW =0.0::Float64
 global const EPSILON = 1e-6::Float64
 global const ITER = 10::Int64
 global const sqrt2 = sqrt(2)
 global const sqrt2pi = sqrt(2*pi)
+
 
 function erfc(x::Float64)
     #"""Complementary error function (thanks to http://bit.ly/zOLqbc)"""
@@ -123,14 +124,14 @@ function ppf(N::Gaussian, p::Float64)
     return N.mu - N.sigma * sqrt2  * erfcinv(2 * p)
 end 
 function trunc(N::Gaussian, margin::Float64, tie::Bool)
-    #draw_margin = calc_draw_margin(draw_probability, size, self)
-    _alpha = (-margin-N.mu)/N.sigma
-    _beta  = ( margin-N.mu)/N.sigma
+    # The range is [alpha, beta]
     if !tie
-        #t= -_alpha
+        _alpha = (margin-N.mu)/N.sigma
         v = pdf(N01,-_alpha) / cdf(N01,-_alpha)
         w = v * (v + (-_alpha))
     else
+        _alpha = (-margin-N.mu)/N.sigma
+        _beta  = (margin-N.mu)/N.sigma
         v = (pdf(N01,_alpha)-pdf(N01,_beta))/(cdf(N01,_beta)-cdf(N01,_alpha))
         u = (_alpha*pdf(N01,_alpha)-_beta*pdf(N01,_beta))/(cdf(N01,_beta)-cdf(N01,_alpha))
         w =  - ( u - v^2 ) 
@@ -188,10 +189,7 @@ mutable struct Rating
 end
 Base.show(io::IO, r::Rating) = print("Rating(", round(r.N.mu,digits=3)," ,", round(r.N.sigma,digits=3), ")")
 Base.copy(r::Rating) = Rating(r.N,r.beta,r.gamma,r.name)
-function forget(R::Rating, t::Int64, max_sigma::Float64=SIGMA)
-    if t < 0
-        println("Elapsed < 0")
-    end
+function forget(R::Rating, t::Int64)
     _sigma = sqrt(R.N.sigma^2 + (R.gamma*t)^2)
     return Rating(Gaussian(R.N.mu, _sigma),R.beta,R.gamma,R.name)
 end 
@@ -203,21 +201,15 @@ mutable struct Game
     # Mutable?
     teams::Vector{Vector{Rating}}
     result::Vector{Int64}
-    margin::Float64
+    p_draw::Float64
     likelihoods::Vector{Vector{Gaussian}}
     evidence::Float64
-    function Game(teams::Vector{Vector{Rating}}, result::Vector{Int64},draw_proba::Float64=0.0)
-        if length(teams) != length(result)
-            return error("length(teams) != length(result)")
-        end
-        if (0.0 > draw_proba) | (1.0 <= draw_proba)
-            return error("0.0 <= Draw probability < 1.0")
-        elseif 0.0 == draw_proba
-            margin = 0.0
-        else
-            margin = compute_margin(draw_proba,sum([ length(teams[e]) for e in 1:length(teams)]) )
-        end
-        _g = new(teams,result,margin,[],0.0)
+    function Game(teams::Vector{Vector{Rating}}, result::Vector{Int64},p_draw::Float64=0.0)
+        # Requirements
+        (length(teams) != length(result)) && throw(error("length(teams) != length(result)"))
+        ((0.0 > p_draw) | (1.0 <= p_draw)) &&  throw(error("0.0 <= Draw probability < 1.0"))
+        
+        _g = new(teams,result,p_draw,[],0.0)
         likelihoods(_g)
         return _g
     end
@@ -299,23 +291,24 @@ function likelihood_teams(g::Game)
     t = [team_messages(performance(g,o[e]), Ninf, Ninf, Ninf) for e in 1:length(g)]
     d = [diff_messages(t[e].prior - t[e+1].prior, Ninf) for e in 1:length(g)-1]
     tie = [r[o[e]]==r[o[e+1]] for e in 1:length(d)]
+    margin = [ g.p_draw==0.0 ? 0.0 : compute_margin(g.p_draw, length(g.teams[e]) + length(g.teams[e+1])) for e in 1:length(d)] 
     g.evidence = 1
     for e in 1:length(d)
-        g.evidence *= !tie[e] ? 1-cdf(d[e].prior, g.margin) : cdf(d[e].prior, g.margin)-cdf(d[e].prior, -g.margin)
+        g.evidence *= !tie[e] ? 1-cdf(d[e].prior, margin[e]) : cdf(d[e].prior, margin[e])-cdf(d[e].prior, -margin[e])
     end
     step = (Inf, Inf)::Tuple{Float64,Float64}; iter = 0::Int64
     while (step > 1e-6) & (iter < 10)
         step = (0., 0.)
-        for e in 1:length(d)-1
+        for e in 1:length(d)-1#e=1
             d[e].prior = posterior_win(t[e]) - posterior_lose(t[e+1])
-            d[e].likelihood = trunc(d[e].prior,g.margin,tie[e])/d[e].prior
+            d[e].likelihood = trunc(d[e].prior,margin[e],tie[e])/d[e].prior
             likelihood_lose = posterior_win(t[e]) - d[e].likelihood
             step = max(step,delta(t[e+1].likelihood_lose,likelihood_lose))
             t[e+1].likelihood_lose = likelihood_lose
         end
         for e in length(d):-1:2
             d[e].prior = posterior_win(t[e]) - posterior_lose(t[e+1])
-            d[e].likelihood = trunc(d[e].prior,g.margin,tie[e])/d[e].prior
+            d[e].likelihood = trunc(d[e].prior,margin[e],tie[e])/d[e].prior
             likelihood_win = (posterior_lose(t[e+1]) + d[e].likelihood)
             step = max(step,delta(t[e].likelihood_win,likelihood_win))
             t[e].likelihood_win = likelihood_win
@@ -324,7 +317,7 @@ function likelihood_teams(g::Game)
     end
     if length(d)==1
         d[1].prior = posterior_win(t[1]) - posterior_lose(t[2])
-        d[1].likelihood = trunc(d[1].prior,g.margin,tie[1])/d[1].prior
+        d[1].likelihood = trunc(d[1].prior,margin[1],tie[1])/d[1].prior
     end
     t[1].likelihood_win = (posterior_lose(t[2]) + d[1].likelihood)
     t[end].likelihood_lose = (posterior_win(t[end-1]) - d[end].likelihood)
@@ -510,7 +503,7 @@ mutable struct History
     gamma::Float64
     epsilon::Float64
     iterations::Int64
-    function History(events::Vector{Vector{Vector{String}}},results::Vector{Vector{Int64}},times::Vector{Int64}=Int64[],priors::Dict{String,Rating}=Dict{String,Rating}(), sigma::Float64=SIGMA, beta::Float64=BETA, gamma::Float64=GAMMA, epsilon::Float64=EPSILON, iterations::Int64=ITER, draw_probability::Float64=DRAW_PROBABILITY)
+    function History(events::Vector{Vector{Vector{String}}},results::Vector{Vector{Int64}},times::Vector{Int64}=Int64[],priors::Dict{String,Rating}=Dict{String,Rating}(), sigma::Float64=SIGMA, beta::Float64=BETA, gamma::Float64=GAMMA, epsilon::Float64=EPSILON, iterations::Int64=ITER, draw_probability::Float64=P_DRAW)
         history_requirements(events,results,times)
         agents = Set(vcat((events...)...))
         forward_message = copy(priors)
@@ -602,5 +595,4 @@ function log_evidence(h::History)
    return sum([log(e) for b in h.batches for e in b.evidences])
 end
 
- 
 end # module

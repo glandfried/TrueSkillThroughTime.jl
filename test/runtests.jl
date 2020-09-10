@@ -3,7 +3,6 @@ using .TrueSkill
 global const ttt = TrueSkill
 using Test
 
-
 @testset "Tests" begin
     @testset "ppf" begin
         @test isapprox(ttt.ppf(ttt.N01,0.3),-0.52440044)
@@ -22,18 +21,25 @@ using Test
         @test isapprox(ttt.compute_margin(0.25,3),2.29958170)
         @test isapprox(ttt.compute_margin(0.0,3),2.7134875810435737e-07)
         @test isapprox(ttt.compute_margin(1.0,3),Inf)
+        
+        #@test isapprox(ttt.compute_margin(0.25,sqrt(2)*25.0/6),1.8776005988)
+        #@test isapprox(ttt.compute_margin(0.25,sqrt(3)*25.0/6),2.29958170)
+        #@test isapprox(ttt.compute_margin(0.0,sqrt(3)*25.0/6),2.7134875810435737e-07)
+        #@test isapprox(ttt.compute_margin(1.0,sqrt(3)*25.0/6),Inf)
     end
     @testset "trunc" begin
         res = ttt.trunc(ttt.N01,0.0,false)
         @test isapprox(res,ttt.Gaussian(0.79788453,0.602810306),1e-5) 
         margin = 1.8776005988
+        res = ttt.trunc(ttt.Gaussian(0.,sqrt(2)*(25/6) ),margin,false)
+        @test isapprox(res, ttt.Gaussian(5.958, 3.226), 1e-3)
         res = ttt.trunc(ttt.Gaussian(0.,sqrt(2)*(25/6) ),margin,true)
-        @test isapprox(res, ttt.Gaussian(0.,1.076707),1e-5)
+        @test isapprox(res, ttt.Gaussian(0.,1.076707),1e-4)
         res = ttt.trunc(ttt.Gaussian(12.,sqrt(2)*(25/6) ),margin,true)
         @test isapprox(res, ttt.Gaussian(0.3900999,1.034401),1e-5)
     end
     @testset "Gaussian" begin
-        N, M = ttt.Gaussian(), ttt.Gaussian(0.0, 1.0)
+        N, M = ttt.Gaussian(25.0, 25.0/3), ttt.Gaussian(0.0, 1.0)
         @test isapprox(M/N, ttt.Gaussian(-0.365, 1.007),1e-3)
         @test isapprox(N*M, ttt.Gaussian(0.355, 0.993),1e-3)
         @test isapprox(N+M, ttt.Gaussian(25.00, 8.393),1e-3)
@@ -41,14 +47,14 @@ using Test
         @test isapprox(N-M, ttt.Gaussian(24.00, 8.393),1e-3)
     end
     @testset "1vs1" begin
-        ta = [ttt.Rating()]
-        tb = [ttt.Rating()]
-        g = ttt.Game([ta,tb], [1,0])
+        ta = [ttt.Rating(25.0,25.0/3,25.0/6,25.0/300)]
+        tb = [ttt.Rating(25.0,25.0/3,25.0/6,25.0/300)]
+        g = ttt.Game([ta,tb], [1,0], 0.0)
         post = ttt.posteriors(g)
         @test isapprox(post[1][1], ttt.Gaussian(20.794779,7.194481), 1e-4) 
         @test isapprox(post[2][1], ttt.Gaussian(29.205220,7.194481), 1e-4)
         
-        g = ttt.Game([[ttt.Rating(29.,1.)] ,[ttt.Rating()]], [1,0], 0.0)
+        g = ttt.Game([[ttt.Rating(29.,1.)] ,[ttt.Rating(25.0,25.0/3,25.0/6,25.0/300)]], [1,0])
         post = ttt.posteriors(g)
         @test isapprox(post[1][1], ttt.Gaussian(28.896,0.996), 1e-3) 
         @test isapprox(post[2][1], ttt.Gaussian(32.189,6.062), 1e-3)
@@ -59,69 +65,83 @@ using Test
         @test isapprox(post[1][1],ttt.Gaussian(25.000000,6.238469796),1e-5)
         @test isapprox(post[2][1],ttt.Gaussian(31.3113582213,6.69881865) ,1e-5)
         
-        g = ttt.Game([[ttt.Rating()],[ttt.Rating()],[ttt.Rating()]], [1,0,2], 0.5)
+        g = ttt.Game([[ttt.Rating(25.0,25.0/3,25.0/6,25.0/300)],[ttt.Rating(25.0,25.0/3,25.0/6,25.0/300)],[ttt.Rating(25.0,25.0/3,25.0/6,25.0/300)]], [1,0,2], 0.5)
         post = ttt.posteriors(g)
-        @test isapprox(post[1][1],ttt.Gaussian(25.00000,6.48760),1e-5)
-        @test isapprox(post[2][1],ttt.Gaussian(29.19950,7.00947),1e-5)
-        @test isapprox(post[3][1],ttt.Gaussian(20.80049,7.00947),1e-5)
+        
+        @test isapprox(post[1][1],ttt.Gaussian(25.000,6.093),1e-3)
+        @test isapprox(post[2][1],ttt.Gaussian(33.379,6.484),1e-3)
+        @test isapprox(post[3][1],ttt.Gaussian(16.621,6.484),1e-3)
     end
     @testset "1vs1 draw" begin
-        ta = [ttt.Rating()]
-        tb = [ttt.Rating()]
+        ta = [ttt.Rating(25.0,25.0/3,25.0/6,25.0/300)]
+        tb = [ttt.Rating(25.0,25.0/3,25.0/6,25.0/300)]
         g = ttt.Game([ta,tb], [0,0], 0.25)
         post = ttt.posteriors(g)
         @test isapprox(post[1][1],ttt.Gaussian(25.000,6.469),1e-3)
         @test isapprox(post[2][1],ttt.Gaussian(25.000,6.469),1e-3)
         
-        ta = [ttt.Rating(25.,3.)]
-        tb = [ttt.Rating(29.,2.)]
+        ta = [ttt.Rating(25.,3.,25.0/6,25.0/300)]
+        tb = [ttt.Rating(29.,2.,25.0/6,25.0/300)]
         g = ttt.Game([ta,tb], [0,0], 0.25)
         post = ttt.posteriors(g)
         @test isapprox(post[1][1],ttt.Gaussian(25.736,2.710),1e-3)
         @test isapprox(post[2][1],ttt.Gaussian(28.672,1.916),1e-3)
     end
     @testset "1vs1vs1 draw" begin
-        ta = [ttt.Rating()]
-        tb = [ttt.Rating()]
-        tc = [ttt.Rating()]
+        ta = [ttt.Rating(25.0,25.0/3,25.0/6,25.0/300)]
+        tb = [ttt.Rating(25.0,25.0/3,25.0/6,25.0/300)]
+        tc = [ttt.Rating(25.0,25.0/3,25.0/6,25.0/300)]
         g = ttt.Game([ta,tb,tc], [0,0,0],0.25)
         post = ttt.posteriors(g)
-        @test isapprox(post[1][1],ttt.Gaussian(25.000,5.746947),1e-3)
-        @test isapprox(post[2][1],ttt.Gaussian(25.000,5.714755),1e-3)
+        @test isapprox(post[1][1],ttt.Gaussian(25.000,5.729),1e-3)
+        @test isapprox(post[2][1],ttt.Gaussian(25.000,5.707),1e-3)
         
-        ta = [ttt.Rating(25.,3.)]
-        tb = [ttt.Rating(25.,3.)]
-        tc = [ttt.Rating(29.,2.)]
+        ta = [ttt.Rating(25.,3.,25.0/6,25.0/300)]
+        tb = [ttt.Rating(25.,3.,25.0/6,25.0/300)]
+        tc = [ttt.Rating(29.,2.,25.0/6,25.0/300)]
         g = ttt.Game([ta,tb,tc], [0,0,0],0.25)
         post = ttt.posteriors(g)
-        @test isapprox(post[1][1],ttt.Gaussian(25.473,2.645),1e-2)
-        @test isapprox(post[2][1],ttt.Gaussian(25.505,2.631),1e-2)
-        @test isapprox(post[3][1],ttt.Gaussian(28.565,1.888),1e-2)
+        @test isapprox(post[1][1],ttt.Gaussian(25.489,2.638),1e-3)
+        @test isapprox(post[2][1],ttt.Gaussian(25.511,2.629),1e-3)
+        @test isapprox(post[3][1],ttt.Gaussian(28.556,1.886),1e-3)
     end
     @testset "NvsN Draw" begin
-        ta = [ttt.Rating(15.,1.),ttt.Rating(15.,1.)]
-        tb = [ttt.Rating(30.,2.)]
+        ta = [ttt.Rating(15.,1.,25.0/6,25.0/300)
+             ,ttt.Rating(15.,1.,25.0/6,25.0/300)]
+        tb = [ttt.Rating(30.,2.,25.0/6,25.0/300)]
         g = ttt.Game([ta,tb], [0,0], 0.25)
         post = ttt.posteriors(g)
         @test isapprox(post[1][1],ttt.Gaussian(15.000,0.9916),1e-3)
         @test isapprox(post[1][2],ttt.Gaussian(15.000,0.9916),1e-3)
         @test isapprox(post[2][1],ttt.Gaussian(30.000,1.9320),1e-3)
     end
+    @testset "NvsNvsN mixt" begin
+        ta = [ttt.Rating(12.,3.,25.0/6,25.0/300)
+             ,ttt.Rating(18.,3.,25.0/6,25.0/300)]
+        tb = [ttt.Rating(30.,3.,25.0/6,25.0/300)]
+        tc = [ttt.Rating(14.,3.,25.0/6,25.0/300)
+             ,ttt.Rating(16.,3.,25.0/6,25.0/300)]
+        g = ttt.Game([ta,tb, tc], [0,1,1], 0.25)
+        post = ttt.posteriors(g)
+        @test isapprox(post[1][1],ttt.Gaussian(13.051,2.864),1e-3)
+        @test isapprox(post[1][2],ttt.Gaussian(19.051,2.864),1e-3)
+        @test isapprox(post[2][1],ttt.Gaussian(29.292,2.764),1e-3)
+        @test isapprox(post[3][1],ttt.Gaussian(13.658,2.813),1e-3)
+        @test isapprox(post[3][2],ttt.Gaussian(15.658,2.813),1e-3)
+    end
     @testset "Game evidence" begin
-        
         @testset "1vs1" begin
-            ta = [ttt.Rating(25.,1e-7)]
-            tb = [ttt.Rating(25.,1e-7)]
+            ta = [ttt.Rating(25.,1e-7,25.0/6,25.0/300)]
+            tb = [ttt.Rating(25.,1e-7,25.0/6,25.0/300)]
             g = ttt.Game([ta,tb], [0,0], 0.25)
             @test isapprox(g.evidence,0.25)
             g = ttt.Game([ta,tb], [0,1], 0.25)
             @test isapprox(g.evidence,0.375)
         end
         @testset "1vs1vs1 margin 0" begin
-            ta = [ttt.Rating(25.,1e-7)]
-            tb = [ttt.Rating(25.,1e-7)]
-            tc = [ttt.Rating(25.,1e-7)]
-            
+            ta = [ttt.Rating(25.,1e-7,25.0/6,25.0/300)]
+            tb = [ttt.Rating(25.,1e-7,25.0/6,25.0/300)]
+            tc = [ttt.Rating(25.,1e-7,25.0/6,25.0/300)]
             
             g_abc = ttt.Game([ta,tb,tc], [1,2,3], 0.)
             g_acb = ttt.Game([ta,tb,tc], [1,3,2], 0.)
@@ -144,7 +164,7 @@ using Test
         end
     end
     @testset "Forget" begin
-        r = ttt.Rating(25.,1e-7)
+        r = ttt.Rating(25.,1e-7,25.0/6,0.15*25.0/3)
         @test isapprox(ttt.forget(r,5).N.sigma,6.25)
         @test isapprox(ttt.forget(r,1).N.sigma,1.25)
     end
