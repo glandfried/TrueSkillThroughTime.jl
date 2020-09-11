@@ -188,7 +188,7 @@ using Test
         @test isapprox(ttt.posterior(b,"e"),ttt.Gaussian(29.205,7.194),1e-3)
         @test isapprox(ttt.posterior(b,"f"),ttt.Gaussian(20.795,7.194),1e-3)
         iter = ttt.convergence(b)
-        @test iter == 0
+        @test iter == 1
     end
     @testset "Same strength" begin
         priors = Dict{String,ttt.Rating}()
@@ -216,7 +216,6 @@ using Test
         
         h = ttt.History(events, results, [1,2,3], priors)
         
-        @test !(h.batches[1].max_step > 1e-6) & !(h.batches[2].max_step > 1e-6)
         @test isapprox(ttt.posterior(h.batches[1],"aa"),ttt.Gaussian(29.205,7.19448),1e-3)
         
         observed = h.batches[2].prior_forward["aa"].N.sigma 

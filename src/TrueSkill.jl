@@ -354,7 +354,6 @@ mutable struct Batch
     prior_backward::Dict{String,Gaussian}
     likelihoods::Vector{Vector{Vector{Gaussian}}}
     likelihood::Dict{String,Gaussian}
-    old_within_prior::Vector{Vector{Vector{Gaussian}}}
     evidences::Vector{Float64}
     agents::Set{String}
     max_step::Tuple{Float64, Float64}
@@ -369,7 +368,6 @@ mutable struct Batch
                    ,Dict{String,Gaussian}()
                    ,likelihoods
                    ,Dict{String,Gaussian}()
-                   ,Vector{Vector{Vector{Gaussian}}}()
                    ,[0.0 for _ in 1:length(events)]
                    ,agents 
                    ,(Inf, Inf))
@@ -378,9 +376,8 @@ mutable struct Batch
         b.elapsed = Dict([ (a, !haskey(last_time, a) ? 0 : ( last_time[a] == -1 ? 1 : (time - last_time[a]) ) ) for a in b.agents ])
         b.prior_forward  = Dict([ (a, !haskey(priors, a) ? Rating(Gaussian(env.mu,env.sigma), env.beta, env.gamma, a) : forget(priors[a],b.elapsed[a]) ) for a in b.agents])
         b.likelihood = Dict([(a, Ninf) for a in b.agents])
-        b.old_within_prior = [ [ [Ninf for a in team ] for team in teams] for teams in events ]
         iteration(b)
-        b.max_step = step_within_prior(b)
+        b.max_step = (Inf, Inf)
         return b
     end
     function Batch(;events::Vector{Vector{Vector{String}}}, results::Vector{Vector{Int64}} 
@@ -419,12 +416,6 @@ function iteration(b::Batch)
         teams = b.events[e]
         _priors = within_priors(b, e)
         
-        for t in 1:length(teams)
-            for j in 1:length(teams[t])
-                b.old_within_prior[e][t][j] = _priors[t][j].N
-            end
-        end
-        
         g = Game(_priors, b.results[e])
         
         for t in 1:length(teams)
@@ -437,22 +428,12 @@ function iteration(b::Batch)
         b.evidences[e] = g.evidence
     end
 end
-function step_within_prior(b::Batch)
-    step = (0.,0.)::Tuple{Float64,Float64}
-    for (e, teams) in enumerate(b.events)
-        for (t, team) in enumerate(teams) 
-        for (j, a) in enumerate(team) 
-            step = max(step, delta(b.old_within_prior[e][t][j], posterior(b,a)/b.likelihoods[e][t][j]) ) 
-        end
-        end
-    end 
-    return step
-end
 function convergence(b::Batch, epsilon::Float64=1e-6)
     iter = 0::Int64    
     while (b.max_step > epsilon) & (iter < 10)
+        old = copy(posteriors(b))
         iteration(b)
-        b.max_step = step_within_prior(b)
+        b.max_step = diff(old, posteriors(b))
         iter += 1
     end
     return iter
@@ -563,8 +544,9 @@ function iteration(h::History)
     end
     
     if (length(h.batches) == 1)
+        old = copy(posteriors(h.batches[1]))
         iteration(h.batches[1])
-        step = step_within_prior(h.batches[1])
+        step = max(step, diff(old, posteriors(h.batches[1])))
     end
         
     return step
@@ -590,6 +572,16 @@ end
 # end
 function log_evidence(h::History)
    return sum([log(e) for b in h.batches for e in b.evidences])
+end
+
+if false
+    priors = Dict{String,Rating}()
+    for k in ["a", "b", "c", "d", "e", "f"]
+        priors[k] = Rating(25., 25.0/3, 25.0/6, 25.0/300, k ) 
+    end
+    events = [ [["a"],["b"]], [["c"],["d"]] , [["e"],["f"]] ]
+    results = [[0,1],[1,0],[0,1]]
+    b = Batch(events = events, results = results, priors = priors)
 end
 
 end # module

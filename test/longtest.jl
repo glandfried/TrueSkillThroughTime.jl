@@ -20,7 +20,7 @@ using DataFrames
     
     
     println(now())
-    h = ttt.History(events, results, times , prior_dict, ttt.Environment(mu=0.0,sigma=10.,beta=1.,gamma=0.15,iter=16))
+    h = ttt.History(events, results, times , prior_dict, ttt.Environment(mu=0.0,sigma=10.,beta=1.,gamma=0.2,iter=16))
     println(now())
     ttt.convergence(h)
     gammas = [(0.00, -Inf), (0.2,ttt.log_evidence(h)), (0.40, -Inf)]        
@@ -43,7 +43,7 @@ using DataFrames
         log_evidence_left = ttt.log_evidence(h)
         println(now())
         
-        gamma_right = 0.3#(gammas[2][1]+gammas[3][1])/2
+        gamma_right = (gammas[2][1]+gammas[3][1])/2
         
         prior_dict = copy(prior_copy)
         println("Gamma right = ", gamma_right)
@@ -67,6 +67,7 @@ using DataFrames
         
     end
     
+    @test isapprox(gammas[2][1], 0.2125)
     ttt_log_evidence = gammas[2][2]
     #print("TS: ", ts_log_evidence, ", TTT:", ttt_log_evidence)
     #@test ts_log_evidence < ttt_log_evidence
