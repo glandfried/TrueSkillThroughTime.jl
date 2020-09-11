@@ -311,21 +311,21 @@ using Test
         @test isapprox(ttt.posterior(h.batches[1],"b"),ttt.Gaussian(-0.016,2.404),1e-3)
         @test isapprox(ttt.posterior(h.batches[3],"b"),ttt.Gaussian( 0.017,2.406),1e-3)
     end
-    @testset "Learning curves" begin
-        events = [ [["aj"],["bj"]],[["bj"],["cj"]], [["cj"],["aj"]] ]
-        results = [[0,1],[0,1],[0,1]]    
-        priors = Dict{String,ttt.Rating}()
-        for k in ["aj", "bj", "cj"]
-            priors[k] = ttt.Rating(25., 25.0/3, 25.0/6, 25.0/300, k ) 
-        end
-        h = ttt.History(events, results, [5,6,7], priors)
-        ttt.convergence(h)
-        lc = ttt.learning_curves(h)
-        
-        @test lc["aj"][1][1] == 5
-        @test lc["aj"][end][1] == 7
-        @test isapprox(lc["aj"][end][2],ttt.Gaussian(24.999,5.420),1e-3)
-        @test isapprox(lc["cj"][end][2],ttt.Gaussian(25.001,5.420),13-3)
-    end
+#     @testset "Learning curves" begin
+#         events = [ [["aj"],["bj"]],[["bj"],["cj"]], [["cj"],["aj"]] ]
+#         results = [[0,1],[0,1],[0,1]]    
+#         priors = Dict{String,ttt.Rating}()
+#         for k in ["aj", "bj", "cj"]
+#             priors[k] = ttt.Rating(25., 25.0/3, 25.0/6, 25.0/300, k ) 
+#         end
+#         h = ttt.History(events, results, [5,6,7], priors)
+#         ttt.convergence(h)
+#         lc = ttt.learning_curves(h)
+#         
+#         @test lc["aj"][1][1] == 5
+#         @test lc["aj"][end][1] == 7
+#         @test isapprox(lc["aj"][end][2],ttt.Gaussian(24.999,5.420),1e-3)
+#         @test isapprox(lc["cj"][end][2],ttt.Gaussian(25.001,5.420),13-3)
+#     end
 end
 

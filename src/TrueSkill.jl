@@ -501,17 +501,12 @@ mutable struct History
     last_time::Dict{String,Int64}#No hay que guardarlo
     batches::Vector{Batch}
     agents::Set{String}
-    partake::Dict{String,Dict{Int64,Batch}}
     env::Environment
     function History(events::Vector{Vector{Vector{String}}},results::Vector{Vector{Int64}},times::Vector{Int64}=Int64[],priors::Dict{String,Rating}=Dict{String,Rating}(), env::Environment=Environment())
         history_requirements(events,results,times)
         agents = Set(vcat((events...)...))
         forward_message = copy(priors)
-        partake = Dict{String,Dict{Int64,Batch}}()
-        for a in agents
-            partake[a] = Dict{Int64,Batch}()
-        end
-        _h = new(length(events), times, priors, forward_message ,Dict{String,Gaussian}(), Dict{String,Int64}(), Vector{Batch}(), agents, partake, env)
+        _h = new(length(events), times, priors, forward_message ,Dict{String,Gaussian}(), Dict{String,Int64}(), Vector{Batch}(), agents, env)
         trueskill(_h, events, results)
         return _h
     end
@@ -533,7 +528,6 @@ function trueskill(h::History, events::Vector{Vector{Vector{String}}},results::V
         push!(h.batches,b)
         for a in b.agents
             h.last_time[a] = length(h.times) == 0 ? -1 : t
-            h.partake[a][t] = b # Problema sin baches, todos los t == 1
             h.forward_message[a] = forward_prior_out(b,a)
         end
         i = j + 1
@@ -575,25 +569,25 @@ function iteration(h::History)
         
     return step
 end
-function convergence(h::History)
+function convergence(h::History, verbose = true)
     step = (Inf, Inf)::Tuple{Float64,Float64}
     iter = 1::Int64
     while (step > h.env.epsilon) & (iter <= h.env.iter)
-        print("Iteration = ", iter)
+        verbose && print("Iteration = ", iter)
         step = iteration(h)
         iter += 1
-        println(", step = ", step)
+        verbose && println(", step = ", step)
     end
     println("End")
     return step, iter
 end
-function learning_curves(h::History)
-    res = Dict{String,Array{Tuple{Int64,Gaussian}}}()
-    for a in h.agents
-        res[a] = sort([ (t, posterior(b,a)) for (t, b) in h.partake[a]])
-    end
-    return res
-end
+# function learning_curves(h::History)
+#     res = Dict{String,Array{Tuple{Int64,Gaussian}}}()
+#     for a in h.agents
+#         res[a] = sort([ (t, posterior(b,a)) for (t, b) in h.partake[a]])
+#     end
+#     return res
+# end
 function log_evidence(h::History)
    return sum([log(e) for b in h.batches for e in b.evidences])
 end

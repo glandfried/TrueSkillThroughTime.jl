@@ -13,27 +13,63 @@ using DataFrames
     for h_key in Set([(row.handicap, row.width) for row in eachrow(data) ])
         prior_dict[string(h_key)] = ttt.Rating(0.,25.0/3.,0.,1.0/100)
     end
+    prior_copy = copy(prior_dict)
     results = [row.black_win == 1 ? [1,0] : [0, 1] for row in eachrow(data) ]
     events = [ r.handicap<2 ? [[string(r.white)],[string(r.black)]] : [[string(r.white)],[string(r.black),string((r.handicap,r.width))]] for r in eachrow(data) ]   
     times = Vector{Int64}()
     
-    println(now())
-    
-    h = ttt.History(events, results, times , prior_dict, ttt.Environment(sigma=12))
-    
-    ts_log_evidence = ttt.log_evidence(h)
     
     println(now())
-    
+    h = ttt.History(events, results, times , prior_dict, ttt.Environment(mu=0.0,sigma=10.,beta=1.,gamma=0.15,iter=16))
+    println(now())
     ttt.convergence(h)
-    
-    ttt_log_evidence = ttt.log_evidence(h)
-    
+    gammas = [(0.00, -Inf), (0.2,ttt.log_evidence(h)), (0.40, -Inf)]        
     println(now())
     
-    print("TS: ", ts_log_evidence, ", TTT:", ttt_log_evidence)
+    delta = Inf::Float64
+    while delta > 0.001
+        
+        gamma_left = (gammas[1][1]+gammas[2][1])/2
+        
+        delta = gammas[2][1] - gamma_left 
+        
+        prior_dict = copy(prior_copy)
+        println("Gamma left = ", gamma_left)
+        println(now())
+        h = ttt.History(events, results, times , prior_dict, ttt.Environment(mu=0.,sigma=10.,beta=1.,gamma=gamma_left,iter=16))
+        ts_log_evidence_right = ttt.log_evidence(h)
+        println(now())
+        ttt.convergence(h)
+        log_evidence_left = ttt.log_evidence(h)
+        println(now())
+        
+        gamma_right = 0.3#(gammas[2][1]+gammas[3][1])/2
+        
+        prior_dict = copy(prior_copy)
+        println("Gamma right = ", gamma_right)
+        println(now())
+        h = ttt.History(events, results, times , prior_dict, ttt.Environment(mu=0.,sigma=10.,beta=1.,gamma=gamma_right,iter=16))
+        ts_log_evidence_right = ttt.log_evidence(h)
+        println(now())
+        ttt.convergence(h)
+        log_evidence_right = ttt.log_evidence(h)
+        println(now())
+        
+        wm = argmax([log_evidence_left ,  gammas[2][2] ,log_evidence_right ])
+        
+        if wm == 1
+            gammas = [gammas[1], (gamma_left, log_evidence_left) ,gammas[2]]
+        elseif wm == 2
+            gammas = [(gamma_left, log_evidence_left) ,gammas[2], (gamma_right, log_evidence_right)]
+        elseif wm == 3
+            gammas = [gammas[2], (gamma_right, log_evidence_right), gammas[3]]
+        end
+        
+    end
     
-    @test ts_log_evidence < ttt_log_evidence
+    ttt_log_evidence = gammas[2][2]
+    #print("TS: ", ts_log_evidence, ", TTT:", ttt_log_evidence)
+    #@test ts_log_evidence < ttt_log_evidence
     
     w_mean = [ ttt.posterior(h.batches[r], string(data[r,"white"])).mu for r in 1:size(data)[1]]                                                            
     b_mean = [ ttt.posterior(h.batches[r], string(data[r,"black"])).mu  for r in 1:size(data)[1]]                                                            
@@ -58,6 +94,7 @@ using DataFrames
                   ,evidence = evidence)
     
     CSV.write("data/longtest_output.csv", df; header=true)
+    CSV.write("data/longtest_gamma.csv", DataFrame(gamma = gammas[2][1], log_evidence = gammas[2][2]); header=true)
     
 end
 
