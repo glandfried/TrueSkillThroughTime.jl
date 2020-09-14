@@ -29,7 +29,7 @@ struct Environment
     end
 end
 function erfc(x::Float64)
-    #"""Complementary error function (thanks to http://bit.ly/zOLqbc)"""
+    """Complementary error function (thanks to http://bit.ly/zOLqbc)"""
     z = abs(x)
     t = 1.0 / (1.0 + z / 2.0)
     r = begin
@@ -100,7 +100,6 @@ function mu_sigma(_tau::Float64, _pi::Float64)
 end
 
 struct Gaussian
-    # TODO: support Gaussian(mu=0.0,sigma=1.0)
     mu::Float64
     sigma::Float64
     tau::Float64
@@ -135,7 +134,7 @@ function ppf(N::Gaussian, p::Float64)
     return N.mu - N.sigma * sqrt2  * erfcinv(2 * p)
 end 
 function trunc(N::Gaussian, margin::Float64, tie::Bool)
-    # The range is [alpha, beta]
+    #The range is [alpha, beta]
     if !tie
         _alpha = (margin-N.mu)/N.sigma
         v = pdf(N01,-_alpha) / cdf(N01,-_alpha)
@@ -189,34 +188,31 @@ mutable struct Rating
     N::Gaussian
     beta::Float64
     gamma::Float64
-    name::String
     draw::Gaussian
-    function Rating(mu::Float64=MU, sigma::Float64=SIGMA,beta::Float64=BETA,gamma::Float64=GAMMA,name::String="",draw::Gaussian=Ninf)
-        return new(Gaussian(mu, sigma), beta, gamma, name, draw)
+    function Rating(mu::Float64=MU, sigma::Float64=SIGMA, beta::Float64=BETA, gamma::Float64=GAMMA, draw::Gaussian=Ninf)
+        return new(Gaussian(mu, sigma), beta, gamma, draw)
     end
-    function Rating(N::Gaussian,beta::Float64=BETA,gamma::Float64=GAMMA,name::String="",draw::Gaussian=Ninf)
-        return new(N, beta, gamma, name, draw)
+    function Rating(N::Gaussian,beta::Float64=BETA,gamma::Float64=GAMMA,draw::Gaussian=Ninf)
+        return new(N, beta, gamma, draw)
     end
 end
 Base.show(io::IO, r::Rating) = print("Rating(", round(r.N.mu,digits=3)," ,", round(r.N.sigma,digits=3), ")")
-Base.copy(r::Rating) = Rating(r.N,r.beta,r.gamma,r.name)
+Base.copy(r::Rating) = Rating(r.N,r.beta,r.gamma)
 function forget(R::Rating, t::Int64)
     _sigma = sqrt(R.N.sigma^2 + t*(R.gamma)^2)
-    return Rating(Gaussian(R.N.mu, _sigma),R.beta,R.gamma,R.name)
+    return Rating(Gaussian(R.N.mu, _sigma),R.beta,R.gamma)
 end 
 function performance(R::Rating)
     _sigma = sqrt(R.N.sigma^2 + R.beta^2)
     return Gaussian(R.N.mu, _sigma)
 end
 mutable struct Game
-    # Mutable?
     teams::Vector{Vector{Rating}}
     result::Vector{Int64}
     p_draw::Float64
     likelihoods::Vector{Vector{Gaussian}}
     evidence::Float64
     function Game(teams::Vector{Vector{Rating}}, result::Vector{Int64},p_draw::Float64=0.0)
-        # Requirements
         (length(teams) != length(result)) && throw(error("length(teams) != length(result)"))
         ((0.0 > p_draw) | (1.0 <= p_draw)) &&  throw(error("0.0 <= Draw probability < 1.0"))
         
@@ -226,7 +222,6 @@ mutable struct Game
     end
 end        
 Base.length(G::Game) = length(G.result)
-#function Base.getindex
 function size(G::Game)
     return [length(g.teams[e]) for e in 1:length(g.teams)]
 end
@@ -345,55 +340,74 @@ end
 function posteriors(g::Game)
     return [[ g.likelihoods[e][i] * g.teams[e][i].N for i in 1:length(g.teams[e])] for e in 1:length(g)]
 end
+mutable struct Skill
+    forward::Rating
+    backward::Gaussian
+    likelihood::Gaussian
+    elapsed::Int64
+    function Skill(forward::Rating=Rating(), backward::Gaussian=Gaussian(), likelihood::Gaussian=Gaussian(), elapsed::Int64=0)
+        return new(forward, backward, likelihood, elapsed)
+    end
+    function Skill(;forward::Rating=Rating(), backward::Gaussian=Gaussian(), likelihood::Gaussian=Gaussian(), elapsed::Int64=0)
+        return new(forward, backward, likelihood, elapsed)
+    end
+end
+mutable struct Agent
+    prior::Rating
+    message::Gaussian
+end
+function forget(agent::Agent, elapsed::Int64)
+    if agent.message != Ninf
+        res = copy(agent.prior)
+        Nf = Gaussian(0.0, agent.prior.gamma * sqrt(elapsed))
+        res.N = agent.message + Nf
+    else
+       res = forget(agent.prior, elapsed) 
+    end
+    return res
+end
+function clean(agents::Dict{String,Agent})
+    for a in keys(agents)
+        agents[a].message = Ninf
+    end
+end
 mutable struct Batch
     events::Vector{Vector{Vector{String}}}
     results::Vector{Vector{Int64}}
     time::Int64
-    elapsed::Dict{String,Int64}
-    prior_forward::Dict{String,Rating}
-    prior_backward::Dict{String,Gaussian}
+    skills::Dict{String,Skill}
     likelihoods::Vector{Vector{Vector{Gaussian}}}
-    likelihood::Dict{String,Gaussian}
     evidences::Vector{Float64}
-    agents::Set{String}
-    max_step::Tuple{Float64, Float64}
-    function Batch(events::Vector{Vector{Vector{String}}}, results::Vector{Vector{Int64}} ,time::Int64, last_time::Dict{String,Int64}=Dict{String,Int64}() , priors::Dict{String,Rating}=Dict{String,Rating}(), env::Environment=Environment())
+    function Batch(events::Vector{Vector{Vector{String}}}, results::Vector{Vector{Int64}} ,time::Int64, last_time::Dict{String,Int64}=Dict{String,Int64}() , agents::Dict{String,Agent}=Dict{String,Agent}(), env::Environment=Environment())
         (length(events)!= length(results)) && throw(error("length(events)!= length(results)"))
         
         likelihoods = [ [ [Ninf for a in team ] for team in teams] for teams in events ]
-        agents = Set(vcat((events...)...))
-        b = new(events, results, time
-                   ,Dict{String,Int64}()
-                   ,Dict{String,Rating}()
-                   ,Dict{String,Gaussian}()
-                   ,likelihoods
-                   ,Dict{String,Gaussian}()
-                   ,[0.0 for _ in 1:length(events)]
-                   ,agents 
-                   ,(Inf, Inf))
+        this_agents = Set(vcat((events...)...))
+        elapsed = Dict([ (a, !haskey(last_time, a) ? 0 : ( last_time[a] == -1 ? 1 : (time - last_time[a]) ) ) for a in this_agents  ])
+        skills = Dict([ (a, Skill(forget(agents[a],elapsed[a]) ,Ninf ,Ninf ,elapsed[a])) for a in this_agents  ])
         
-        b.prior_backward = Dict([ (a, Ninf) for a in b.agents])
-        b.elapsed = Dict([ (a, !haskey(last_time, a) ? 0 : ( last_time[a] == -1 ? 1 : (time - last_time[a]) ) ) for a in b.agents ])
-        b.prior_forward  = Dict([ (a, !haskey(priors, a) ? Rating(Gaussian(env.mu,env.sigma), env.beta, env.gamma, a) : forget(priors[a],b.elapsed[a]) ) for a in b.agents])
-        b.likelihood = Dict([(a, Ninf) for a in b.agents])
+        b = new(events, results, time
+                   ,skills
+                   ,likelihoods
+                   ,[0.0 for _ in 1:length(events)])
+
         iteration(b)
-        b.max_step = (Inf, Inf)
         return b
     end
     function Batch(;events::Vector{Vector{Vector{String}}}, results::Vector{Vector{Int64}} 
-                 ,time::Int64=0, last_time::Dict{String,Int64}=Dict{String,Int64}() , priors::Dict{String,Rating}=Dict{String,Rating}(), env::Environment=Environment())
-        Batch(events, results, time, last_time, priors, env)
+                 ,time::Int64=0, last_time::Dict{String,Int64}=Dict{String,Int64}() , agents::Dict{String,Agent}=Dict{String,Agent}(), env::Environment=Environment())
+        Batch(events, results, time, last_time, agents, env)
     end
 end
 
 Base.show(io::IO, b::Batch) = print("Batch(time=", b.time, ", events=", b.events, ", results=", b.results,")")
 Base.length(b::Batch) = length(b.results)
 function posterior(b::Batch, agent::String)
-    return b.likelihood[agent]*b.prior_backward[agent]*b.prior_forward[agent].N   
+    return b.skills[agent].likelihood*b.skills[agent].backward*b.skills[agent].forward.N   
 end
 function posteriors(b::Batch)
     res = Dict{String,Gaussian}()
-    for a in b.agents
+    for (a, s) in b.skills
         res[a] = posterior(b,a)
     end
     return res
@@ -403,7 +417,7 @@ function within_priors(b::Batch, event::Int64)
     for (t, team) in enumerate(b.events[event])
         res_team = Vector{Rating}()    
         for (j, a) in enumerate(team)
-            r = copy(b.prior_forward[a])
+            r = copy(b.skills[a].forward)
             r.N = posterior(b,a)/b.likelihoods[event][t][j]
             push!(res_team, r)
         end
@@ -414,13 +428,12 @@ end
 function iteration(b::Batch)
     for e in 1:length(b)#e=1
         teams = b.events[e]
-        _priors = within_priors(b, e)
         
-        g = Game(_priors, b.results[e])
+        g = Game(within_priors(b, e), b.results[e])
         
         for t in 1:length(teams)
             for j in 1:length(teams[t])
-                b.likelihood[teams[t][j]] = (b.likelihood[teams[t][j]] / b.likelihoods[e][t][j]) * g.likelihoods[t][j]
+                b.skills[teams[t][j]].likelihood = (b.skills[teams[t][j]].likelihood / b.likelihoods[e][t][j]) * g.likelihoods[t][j]
                 b.likelihoods[e][t][j] = g.likelihoods[t][j]
             end
         end
@@ -430,116 +443,101 @@ function iteration(b::Batch)
 end
 function convergence(b::Batch, epsilon::Float64=1e-6)
     iter = 0::Int64    
-    while (b.max_step > epsilon) & (iter < 10)
+    step = (Inf, Inf)
+    while (step > epsilon) & (iter < 10)
         old = copy(posteriors(b))
         iteration(b)
-        b.max_step = diff(old, posteriors(b))
+        step = diff(old, posteriors(b))
         iter += 1
     end
     return iter
 end
-function forward_prior_out(b::Batch, agent::String)#agent="b"
-    res = copy(b.prior_forward[agent])
-    res.N *= b.likelihood[agent]
-    return res
+function forward_prior_out(b::Batch, agent::String)
+    return b.skills[agent].forward.N * b.skills[agent].likelihood
 end
 function backward_prior_out(b::Batch, agent::String)
-    N = b.likelihood[agent]*b.prior_backward[agent]
-    # No usar forget ac\'a
-    return N+Gaussian(0., b.prior_forward[agent].gamma * sqrt(b.elapsed[agent]) ) 
+    N = b.skills[agent].likelihood*b.skills[agent].backward
+    return N+Gaussian(0., b.skills[agent].forward.gamma * sqrt(b.skills[agent].elapsed) ) 
 end
-function new_backward_info(b::Batch, backward_message::Dict{String,Gaussian})
-    for a in b.agents#a="c"
-        b.prior_backward[a] = haskey(backward_message, a) ? backward_message[a] : Ninf
+function new_backward_info(b::Batch, agents::Dict{String,Agent})
+    for a in keys(b.skills)
+        b.skills[a].backward = agents[a].message
     end
-    b.max_step = (Inf, Inf)
     return iteration(b)
 end
-function new_forward_info(b::Batch, forward_message::Dict{String,Rating}, env::Environment=Environment())
-    for a in b.agents
-        # TODO: Cuando haskey(forward_message, a) no es verdadero????????????????????????????????????
-        b.prior_forward[a] = haskey(forward_message, a) ? forget(forward_message[a],b.elapsed[a]) : Rating(Gaussian(env.mu, env.sigma), env.beta, env.gamma)
+function new_forward_info(b::Batch, agents::Dict{String,Agent})
+    for a in keys(b.skills)
+        b.skills[a].forward = agents[a].message != Ninf ? forget(agents[a],b.skills[a].elapsed) : agents[a].prior  
     end
-    b.max_step = (Inf, Inf)
     return iteration(b)
 end
-
-function history_requirements(events::Vector{Vector{Vector{String}}},results::Vector{Vector{Int64}},times::Vector{Int64})
-    if length(events) != length(results)
-        error("length(events) != length(results)")
-    end
-    if (length(times) > 0) & (length(events) != length(times))
-        error("length(times) > 0) & (length(events) != length(times))")
-    end
-end
-
 mutable struct History
     size::Int64
-    times::Vector{Int64}
-    priors::Dict{String,Rating}
-    forward_message::Dict{String,Rating}
-    backward_message::Dict{String,Gaussian}
-    last_time::Dict{String,Int64}#No hay que guardarlo
     batches::Vector{Batch}
-    agents::Set{String}
+    agents::Dict{String,Agent}
     env::Environment
     function History(events::Vector{Vector{Vector{String}}},results::Vector{Vector{Int64}},times::Vector{Int64}=Int64[],priors::Dict{String,Rating}=Dict{String,Rating}(), env::Environment=Environment())
-        history_requirements(events,results,times)
-        agents = Set(vcat((events...)...))
-        forward_message = copy(priors)
-        _h = new(length(events), times, priors, forward_message ,Dict{String,Gaussian}(), Dict{String,Int64}(), Vector{Batch}(), agents, env)
-        trueskill(_h, events, results)
-        return _h
+        #priors=Dict{String,Rating}()
+        (length(events) != length(results)) && throw(error("length(events) != length(results)"))
+        (length(times) > 0) & (length(events) != length(times)) && throw(error("length(times) > 0) & (length(events) != length(times))"))
+        
+        agents = Dict([ (a, Agent(haskey(priors, a) ? priors[a] : Rating(env.mu, env.sigma, env.beta, env.gamma), Ninf)) for a in Set(vcat((events...)...)) ])
+        h = new(length(events), Vector{Batch}(), agents, env)
+        trueskill(h, events, results, times)
+        return h
     end
     function History(;events::Vector{Vector{Vector{String}}},results::Vector{Vector{Int64}},times::Vector{Int64}=Int64[],priors::Dict{String,Rating}=Dict{String,Rating}(), env::Environment=Environment())
         History(events, results, times, priors, env)
     end
 end
+
 Base.length(h::History) = h.size
 Base.show(io::IO, h::History) = print("History(Size=", h.size
                                      ,", Batches=", length(h.batches)
                                     ,", Agents=", length(h.agents), ")")
-function trueskill(h::History, events::Vector{Vector{Vector{String}}},results::Vector{Vector{Int64}})
-    o = length(h.times)>0 ? sortperm(h.times) : [i for i in 1:length(events)]
+function trueskill(h::History, events::Vector{Vector{Vector{String}}},results::Vector{Vector{Int64}}, times::Vector{Int64})
+    last_time = Dict{String,Int64}()
+    o = length(times)>0 ? sortperm(times) : [i for i in 1:length(events)]
     i = 1::Int64
     while i <= length(h)
-        j, t = i, length(h.times) == 0 ? i : h.times[o[i]]
-        while ((length(h.times)>0) & (j < length(h)) && (h.times[o[j+1]] == t)) j += 1 end
-        b = Batch(events[o[i:j]],results[o[i:j]], t, h.last_time, h.forward_message, h.env)        
+        j, t = i, length(times) == 0 ? i : times[o[i]]
+        while ((length(times)>0) & (j < length(h)) && (times[o[j+1]] == t)) j += 1 end
+        b = Batch(events[o[i:j]],results[o[i:j]], t, last_time, h.agents, h.env)        
         push!(h.batches,b)
-        for a in b.agents
-            h.last_time[a] = length(h.times) == 0 ? -1 : t
-            h.forward_message[a] = forward_prior_out(b,a)
+        for a in keys(b.skills)
+            last_time[a] = length(times) == 0 ? -1 : t
+            h.agents[a].message = forward_prior_out(b,a)
         end
         i = j + 1
     end
 end
 function diff(old::Dict{String,Gaussian}, new::Dict{String,Gaussian})
     step = (0., 0.)
-    for (a, _) in old
+    for a in keys(old)
         step = max(step, delta(old[a],new[a]))
     end
     return step
 end
 function iteration(h::History)
     step = (0., 0.)
-    h.backward_message=Dict{String,Gaussian}()
-    for j in length(h.batches)-1:-1:1# j=3
-        for a in h.batches[j+1].agents# a = "c"
-            h.backward_message[a] = backward_prior_out(h.batches[j+1],a)
+    
+    clean(h.agents)
+    for j in length(h.batches)-1:-1:1# j = 2 
+        for a in keys(h.batches[j+1].skills)
+            h.agents[a].message = backward_prior_out(h.batches[j+1],a)
         end
         old = copy(posteriors(h.batches[j]))
-        new_backward_info(h.batches[j], h.backward_message)
+        new_backward_info(h.batches[j], h.agents)
         step = max(step, diff(old, posteriors(h.batches[j])))
     end
     
-    h.forward_message=copy(h.priors)
-    for j in 2:length(h.batches)#j=2
-        for a in h.batches[j-1].agents#a = "b"
-            h.forward_message[a] = forward_prior_out(h.batches[j-1],a)
+    clean(h.agents)
+    for j in 2:length(h.batches)# j = 2
+        for a in keys(h.batches[j-1].skills)
+            h.agents[a].message = forward_prior_out(h.batches[j-1],a)
         end
         old = copy(posteriors(h.batches[j]))
-        new_forward_info(h.batches[j], h.forward_message, h.env)
+        new_forward_info(h.batches[j], h.agents)
         step = max(step, diff(old, posteriors(h.batches[j])))
     end
     
@@ -574,14 +572,5 @@ function log_evidence(h::History)
    return sum([log(e) for b in h.batches for e in b.evidences])
 end
 
-if false
-    priors = Dict{String,Rating}()
-    for k in ["a", "b", "c", "d", "e", "f"]
-        priors[k] = Rating(25., 25.0/3, 25.0/6, 25.0/300, k ) 
-    end
-    events = [ [["a"],["b"]], [["c"],["d"]] , [["e"],["f"]] ]
-    results = [[0,1],[1,0],[0,1]]
-    b = Batch(events = events, results = results, priors = priors)
-end
 
 end # module
