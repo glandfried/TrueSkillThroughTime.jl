@@ -304,6 +304,19 @@ using Test
         @test isapprox(ttt.posterior(h.batches[1],"b"),ttt.Gaussian(-0.016,2.404),1e-3)
         @test isapprox(ttt.posterior(h.batches[3],"b"),ttt.Gaussian( 0.017,2.406),1e-3)
     end
+    @testset "Memory Size" begin
+        composition = [ [["a"],["b"]], [["a"],["c"]] , [["b"],["c"]] ]
+        results = [[0,1],[1,0],[0,1]]
+        env = ttt.Environment(mu=0.0,sigma=6.0, beta=1.0, gamma=0.05, iter=100)
+        
+        h = ttt.History(events=composition, results=results, times = [0, 10, 20], env=env)
+        @test Base.summarysize(h) < 4400
+        @test Base.summarysize(h.batches[1])+Base.summarysize(h.batches[2])+Base.summarysize(h.batches[3]) < 3500
+        
+        @test Base.summarysize(h.batches[1].skills) == 794
+        @test Base.summarysize(h.batches[1].events) == 346
+        
+    end
 #     @testset "Learning curves" begin
 #         events = [ [["aj"],["bj"]],[["bj"],["cj"]], [["cj"],["aj"]] ]
 #         results = [[0,1],[0,1],[0,1]]    

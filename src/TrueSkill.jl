@@ -371,25 +371,40 @@ function clean(agents::Dict{String,Agent})
         agents[a].message = Ninf
     end
 end
+mutable struct Item
+    agent::String
+    likelihood::Gaussian
+end
+mutable struct Team
+    items::Vector{Item}
+    output::Int64
+end
+mutable struct Event
+    teams::Vector{Team}
+    evidence::Float64
+end
+function outputs(event::Event)
+    return [ team.output for team in event.teams]
+end
 mutable struct Batch
-    events::Vector{Vector{Vector{String}}}
-    results::Vector{Vector{Int64}}
+    #events::Vector{Vector{Vector{String}}}
+    #results::Vector{Vector{Int64}}
+    #likelihoods::Vector{Vector{Vector{Gaussian}}}
+    #evidences::Vector{Float64}
     time::Int64
+    events::Vector{Event}
     skills::Dict{String,Skill}
-    likelihoods::Vector{Vector{Vector{Gaussian}}}
-    evidences::Vector{Float64}
-    function Batch(events::Vector{Vector{Vector{String}}}, results::Vector{Vector{Int64}} ,time::Int64, last_time::Dict{String,Int64}=Dict{String,Int64}() , agents::Dict{String,Agent}=Dict{String,Agent}(), env::Environment=Environment())
-        (length(events)!= length(results)) && throw(error("length(events)!= length(results)"))
+    function Batch(composition::Vector{Vector{Vector{String}}}, results::Vector{Vector{Int64}} ,time::Int64, last_time::Dict{String,Int64}=Dict{String,Int64}() , agents::Dict{String,Agent}=Dict{String,Agent}(), env::Environment=Environment())
+        (length(composition)!= length(results)) && throw(error("length(events)!= length(results)"))
         
-        likelihoods = [ [ [Ninf for a in team ] for team in teams] for teams in events ]
-        this_agents = Set(vcat((events...)...))
+        this_agents = Set(vcat((composition...)...))
         elapsed = Dict([ (a, !haskey(last_time, a) ? 0 : ( last_time[a] == -1 ? 1 : (time - last_time[a]) ) ) for a in this_agents  ])
-        skills = Dict([ (a, Skill(forget(agents[a],elapsed[a]) ,Ninf ,Ninf ,elapsed[a])) for a in this_agents  ])
+        skills = Dict([ (a, Skill(forget(agents[a],elapsed[a]) ,Ninf ,Ninf , elapsed[a])) for a in this_agents  ])
+        events = [Event([Team([Item(composition[e][t][a], Ninf) for a in 1:length(composition[e][t]) ] 
+                              ,results[e][t]  ) for t in 1:length(composition[e]) ]
+                        ,0.0) for e in 1:length(composition) ]
         
-        b = new(events, results, time
-                   ,skills
-                   ,likelihoods
-                   ,[0.0 for _ in 1:length(events)])
+        b = new(time, events , skills)
 
         iteration(b)
         return b
@@ -400,8 +415,8 @@ mutable struct Batch
     end
 end
 
-Base.show(io::IO, b::Batch) = print("Batch(time=", b.time, ", events=", b.events, ", results=", b.results,")")
-Base.length(b::Batch) = length(b.results)
+Base.show(io::IO, b::Batch) = print("Batch(time=", b.time, ", events=", b.events, ")")
+Base.length(b::Batch) = length(b.events)
 function posterior(b::Batch, agent::String)
     return b.skills[agent].likelihood*b.skills[agent].backward*b.skills[agent].forward.N   
 end
@@ -412,13 +427,13 @@ function posteriors(b::Batch)
     end
     return res
 end
-function within_priors(b::Batch, event::Int64)
+function within_priors(b::Batch, event::Int64)#event=1
     res = Vector{Vector{Rating}}()
-    for (t, team) in enumerate(b.events[event])
+    for team in b.events[event].teams
         res_team = Vector{Rating}()    
-        for (j, a) in enumerate(team)
-            r = copy(b.skills[a].forward)
-            r.N = posterior(b,a)/b.likelihoods[event][t][j]
+        for item in team.items
+            r = copy(b.skills[item.agent].forward)
+            r.N = posterior(b,item.agent)/item.likelihood
             push!(res_team, r)
         end
         push!(res, res_team)
@@ -427,18 +442,17 @@ function within_priors(b::Batch, event::Int64)
 end
 function iteration(b::Batch)
     for e in 1:length(b)#e=1
-        teams = b.events[e]
         
-        g = Game(within_priors(b, e), b.results[e])
+        g = Game(within_priors(b, e), outputs(b.events[e]))
         
-        for t in 1:length(teams)
-            for j in 1:length(teams[t])
-                b.skills[teams[t][j]].likelihood = (b.skills[teams[t][j]].likelihood / b.likelihoods[e][t][j]) * g.likelihoods[t][j]
-                b.likelihoods[e][t][j] = g.likelihoods[t][j]
+        for (t, team) in enumerate(b.events[e].teams)
+            for (i, item) in enumerate(team.items)
+                b.skills[item.agent].likelihood = (b.skills[item.agent].likelihood / item.likelihood) * g.likelihoods[t][i]
+                item.likelihood = g.likelihoods[t][i]
             end
         end
         
-        b.evidences[e] = g.evidence
+        b.events[e].evidence = g.evidence
     end
 end
 function convergence(b::Batch, epsilon::Float64=1e-6)
@@ -477,7 +491,6 @@ mutable struct History
     agents::Dict{String,Agent}
     env::Environment
     function History(events::Vector{Vector{Vector{String}}},results::Vector{Vector{Int64}},times::Vector{Int64}=Int64[],priors::Dict{String,Rating}=Dict{String,Rating}(), env::Environment=Environment())
-        #priors=Dict{String,Rating}()
         (length(events) != length(results)) && throw(error("length(events) != length(results)"))
         (length(times) > 0) & (length(events) != length(times)) && throw(error("length(times) > 0) & (length(events) != length(times))"))
         
@@ -570,6 +583,14 @@ end
 # end
 function log_evidence(h::History)
    return sum([log(e) for b in h.batches for e in b.evidences])
+end
+
+if false
+    composition = [ [["a"],["b"]], [["a"],["c"]] , [["b"],["c"]] ]
+    results = [[0,1],[1,0],[0,1]]
+    env = Environment(mu=0.0,sigma=6.0, beta=1.0, gamma=0.05, iter=100)
+    h = History(events=composition, results=results, times = [0, 10, 20], env=env)
+    Base.summarysize(h) 
 end
 
 
