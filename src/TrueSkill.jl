@@ -582,16 +582,7 @@ end
 #     return res
 # end
 function log_evidence(h::History)
-   return sum([log(e) for b in h.batches for e in b.evidences])
+   return sum([log(event.evidence) for b in h.batches for event in b.events])
 end
-
-if false
-    composition = [ [["a"],["b"]], [["a"],["c"]] , [["b"],["c"]] ]
-    results = [[0,1],[1,0],[0,1]]
-    env = Environment(mu=0.0,sigma=6.0, beta=1.0, gamma=0.05, iter=100)
-    h = History(events=composition, results=results, times = [0, 10, 20], env=env)
-    Base.summarysize(h) 
-end
-
 
 end # module
