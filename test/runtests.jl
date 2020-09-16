@@ -304,18 +304,56 @@ using Test
         @test isapprox(ttt.posterior(h.batches[1],"b"),ttt.Gaussian(-0.016,2.404),1e-3)
         @test isapprox(ttt.posterior(h.batches[3],"b"),ttt.Gaussian( 0.017,2.406),1e-3)
     end
+    @testset "Teams" begin
+        events = [ [["a","b"],["c","d"]], [["e","f"] , ["b","c"]], [["a","d"], ["e","f"]]  ]
+        results = [[0,1],[1,0],[0,1]]
+        env = ttt.Environment(mu=0.0,sigma=6.0, beta=1.0, gamma=0.0)
+        
+        h = ttt.History(events=events, results=results, env=env)
+        step , iter = ttt.convergence(h)
+        
+        @test isapprox( ttt.posterior(h.batches[1],"a"), ttt.posterior(h.batches[1],"b"), 1e-3)
+        @test isapprox( ttt.posterior(h.batches[1],"c"), ttt.posterior(h.batches[1],"d"), 1e-3)
+        @test isapprox( ttt.posterior(h.batches[2],"e"), ttt.posterior(h.batches[2],"f"), 1e-3)
+        
+        @test isapprox( ttt.posterior(h.batches[1],"a"), ttt.Gaussian(mu=4.085 ,sigma=5.107), 1e-3 )
+        @test isapprox( ttt.posterior(h.batches[1],"c"), ttt.Gaussian(mu=-0.533 ,sigma=5.107), 1e-3)
+        @test isapprox( ttt.posterior(h.batches[3],"e"), ttt.Gaussian(mu=-3.552 ,sigma=5.155), 1e-3 )
+    end
+    @testset "sigma-beta 0" begin
+        events = [ [["a","a_b","b"],["c","c_d","d"]]
+                 , [["e","e_f","f"],["b","b_c","c"]]
+                 , [["a","a_d","d"],["e","e_f","f"]]  ]
+        results = [[0,1],[1,0],[0,1]]
+        env = ttt.Environment(mu=0.0,sigma=6.0, beta=1.0, gamma=0.0)
+        priors = Dict{String,ttt.Rating}()
+        for k in ["a_b", "c_d", "e_f", "b_c", "a_d", "e_f"]
+            priors[k] = ttt.Rating(mu=0.0, sigma=1e-7, beta=0.0, gamma=0.2) 
+        end
+        
+        h = ttt.History(events=events, results=results, priors=priors, env=env)
+        step , iter = ttt.convergence(h)
+        @test isapprox( ttt.posterior(h.batches[1],"a_b"), ttt.Gaussian(mu=0.0 ,sigma=0.0), 1e-3 )
+        @test isapprox( ttt.posterior(h.batches[3],"e_f"), ttt.Gaussian(mu=-0.002 ,sigma=0.2), 1e-3)
+    end
     @testset "Memory Size" begin
         composition = [ [["a"],["b"]], [["a"],["c"]] , [["b"],["c"]] ]
         results = [[0,1],[1,0],[0,1]]
         env = ttt.Environment(mu=0.0,sigma=6.0, beta=1.0, gamma=0.05, iter=100)
         
+        
         h = ttt.History(events=composition, results=results, times = [0, 10, 20], env=env)
         @test Base.summarysize(h) < 4400
-        @test Base.summarysize(h.batches[1])+Base.summarysize(h.batches[2])+Base.summarysize(h.batches[3]) < 3500
+        @test Base.summarysize(h.batches) < 3505
+        @test Base.summarysize(h.agents) < 850
+        @test Base.summarysize(h.batches[1]) < 1150
         
+        @test (Base.summarysize(composition) ) * 7.5 < Base.summarysize(h)
+        @test (Base.summarysize(composition) ) * 8 > Base.summarysize(h)
+        
+        Base.summarysize(h.batches)
         @test Base.summarysize(h.batches[1].skills) == 794
         @test Base.summarysize(h.batches[1].events) == 346
-        
     end
 #     @testset "Learning curves" begin
 #         events = [ [["aj"],["bj"]],[["bj"],["cj"]], [["cj"],["aj"]] ]

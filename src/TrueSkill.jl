@@ -12,6 +12,8 @@ global const EPSILON = 1e-6::Float64
 global const ITER = 10::Int64
 global const sqrt2 = sqrt(2)
 global const sqrt2pi = sqrt(2*pi)
+global const PI = 1/(SIGMA^2)
+global const TAU = MU*PI
 
 struct Environment
     mu::Float64
@@ -114,6 +116,10 @@ struct Gaussian
         end
         return new(mu, sigma, _tau, _pi)
     end
+    function Gaussian(;mu::Float64=MU, sigma::Float64=SIGMA)
+        _tau, _pi =  tau_pi(mu, sigma)
+        return new(mu, sigma, _tau, _pi)
+    end
 end
 
 global const N01 = Gaussian(0.0, 1.0)
@@ -190,10 +196,14 @@ mutable struct Rating
     gamma::Float64
     draw::Gaussian
     function Rating(mu::Float64=MU, sigma::Float64=SIGMA, beta::Float64=BETA, gamma::Float64=GAMMA, draw::Gaussian=Ninf)
-        return new(Gaussian(mu, sigma), beta, gamma, draw)
+        Rating(Gaussian(mu, sigma), beta, gamma, draw)
     end
     function Rating(N::Gaussian,beta::Float64=BETA,gamma::Float64=GAMMA,draw::Gaussian=Ninf)
+        (N.sigma == 0.0) && throw(error("Rating require: (N.sigma > 0.0)"))
         return new(N, beta, gamma, draw)
+    end
+    function Rating(;mu::Float64=MU, sigma::Float64=SIGMA, beta::Float64=BETA, gamma::Float64=GAMMA, draw::Gaussian=Ninf)
+        Rating(Gaussian(mu, sigma), beta, gamma, draw)
     end
 end
 Base.show(io::IO, r::Rating) = print("Rating(", round(r.N.mu,digits=3)," ,", round(r.N.sigma,digits=3), ")")
@@ -387,10 +397,6 @@ function outputs(event::Event)
     return [ team.output for team in event.teams]
 end
 mutable struct Batch
-    #events::Vector{Vector{Vector{String}}}
-    #results::Vector{Vector{Int64}}
-    #likelihoods::Vector{Vector{Vector{Gaussian}}}
-    #evidences::Vector{Float64}
     time::Int64
     events::Vector{Event}
     skills::Dict{String,Skill}
@@ -417,7 +423,7 @@ end
 
 Base.show(io::IO, b::Batch) = print("Batch(time=", b.time, ", events=", b.events, ")")
 Base.length(b::Batch) = length(b.events)
-function posterior(b::Batch, agent::String)
+function posterior(b::Batch, agent::String)#agent="a_b"
     return b.skills[agent].likelihood*b.skills[agent].backward*b.skills[agent].forward.N   
 end
 function posteriors(b::Batch)
@@ -508,14 +514,14 @@ Base.length(h::History) = h.size
 Base.show(io::IO, h::History) = print("History(Size=", h.size
                                      ,", Batches=", length(h.batches)
                                     ,", Agents=", length(h.agents), ")")
-function trueskill(h::History, events::Vector{Vector{Vector{String}}},results::Vector{Vector{Int64}}, times::Vector{Int64})
+function trueskill(h::History, composition::Vector{Vector{Vector{String}}},results::Vector{Vector{Int64}}, times::Vector{Int64})
     last_time = Dict{String,Int64}()
-    o = length(times)>0 ? sortperm(times) : [i for i in 1:length(events)]
+    o = length(times)>0 ? sortperm(times) : [i for i in 1:length(composition)]
     i = 1::Int64
     while i <= length(h)
         j, t = i, length(times) == 0 ? i : times[o[i]]
         while ((length(times)>0) & (j < length(h)) && (times[o[j+1]] == t)) j += 1 end
-        b = Batch(events[o[i:j]],results[o[i:j]], t, last_time, h.agents, h.env)        
+        b = Batch(composition[o[i:j]],results[o[i:j]], t, last_time, h.agents, h.env)        
         push!(h.batches,b)
         for a in keys(b.skills)
             last_time[a] = length(times) == 0 ? -1 : t
@@ -574,13 +580,15 @@ function convergence(h::History, verbose = true)
     println("End")
     return step, iter
 end
-# function learning_curves(h::History)
-#     res = Dict{String,Array{Tuple{Int64,Gaussian}}}()
-#     for a in h.agents
-#         res[a] = sort([ (t, posterior(b,a)) for (t, b) in h.partake[a]])
-#     end
-#     return res
-# end
+function learning_curves(h::History)
+    res = Dict{String,Array{Tuple{Int64,Gaussian}}}()
+    for b in h.batches
+        for a in keys(b.skills)
+            res[a] = haskey(res, a) ? push!(res[a], (b.time, posterior(b,a))) : [(b.time,posterior(b,a))]
+        end
+    end
+    return res
+end
 function log_evidence(h::History)
    return sum([log(event.evidence) for b in h.batches for event in b.events])
 end

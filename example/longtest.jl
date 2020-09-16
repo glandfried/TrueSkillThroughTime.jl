@@ -8,7 +8,8 @@ using Dates
 using DataFrames
 
 @testset "Test OGS" begin
-    data = CSV.read("data/summary_filtered.csv")    
+    println("Opening dataset")
+    data = CSV.read("input/summary_filtered.csv")    
     prior_dict = Dict{String,ttt.Rating}()
     for h_key in Set([(row.handicap, row.width) for row in eachrow(data) ])
         prior_dict[string(h_key)] = ttt.Rating(0.,25.0/3.,0.,1.0/100)
@@ -18,11 +19,12 @@ using DataFrames
     events = [ r.handicap<2 ? [[string(r.white)],[string(r.black)]] : [[string(r.white)],[string(r.black),string((r.handicap,r.width))]] for r in eachrow(data) ]   
     times = Vector{Int64}()
     
-    
     println(now())
+    println("Creating History")
     h = ttt.History(events, results, times , prior_dict, ttt.Environment(mu=0.0,sigma=10.,beta=1.,gamma=0.2125,iter=16))
     ts_log_evidence = ttt.log_evidence(h)
     println(now())
+    println("Converging History")
     ttt.convergence(h)
     ttt_log_evidence = ttt.log_evidence(h)
     println(now())
@@ -53,7 +55,7 @@ using DataFrames
                   ,h_std = h_std
                   ,evidence = evidence)
     
-    CSV.write("data/longtest_output.csv", df; header=true)
+    CSV.write("output/longtest_output.csv", df; header=true)
     
 end
 

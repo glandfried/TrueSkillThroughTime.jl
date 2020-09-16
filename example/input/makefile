@@ -1,3 +1,4 @@
+all: ChessAnalysis.zip summary_filtered.zip 
 
 ChessAnalysis.zip:
 	#  Blog 2008
@@ -11,9 +12,6 @@ ChessAnalysis.zip:
 	#xbuild /p:Configuration=Release ChessAnalysis.fsproj
 	#mono bin/Release/ChessAnalysis.exe -out output.csv SmallChessBase.csv
 
-ttt_all_end.zip:
-	wget https://github.com/glandfried/centrality-ogs-dataset/releases/download/v0.0/ttt_all_end.zip
-	unzip ttt_all_end.zip 
 summary_filtered.zip:
 	wget https://github.com/glandfried/centrality-ogs-dataset/releases/download/v0.0/summary_filtered.zip
 	unzip summary_filtered.zip
