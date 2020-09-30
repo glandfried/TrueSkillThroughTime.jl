@@ -355,21 +355,38 @@ using Test
         @test Base.summarysize(h.batches[1].skills) == 794
         @test Base.summarysize(h.batches[1].events) == 346
     end
-#     @testset "Learning curves" begin
-#         events = [ [["aj"],["bj"]],[["bj"],["cj"]], [["cj"],["aj"]] ]
-#         results = [[0,1],[0,1],[0,1]]    
-#         priors = Dict{String,ttt.Rating}()
-#         for k in ["aj", "bj", "cj"]
-#             priors[k] = ttt.Rating(25., 25.0/3, 25.0/6, 25.0/300, k ) 
-#         end
-#         h = ttt.History(events, results, [5,6,7], priors)
-#         ttt.convergence(h)
-#         lc = ttt.learning_curves(h)
+    @testset "Learning curves" begin
+        events = [ [["aj"],["bj"]],[["bj"],["cj"]], [["cj"],["aj"]] ]
+        results = [[0,1],[0,1],[0,1]]    
+        priors = Dict{String,ttt.Rating}()
+        for k in ["aj", "bj", "cj"]
+            priors[k] = ttt.Rating(25., 25.0/3, 25.0/6, 25.0/300) 
+        end
+        h = ttt.History(events, results, [5,6,7], priors)
+        ttt.convergence(h)
+        lc = ttt.learning_curves(h)
+        
+        @test lc["aj"][1][1] == 5
+        @test lc["aj"][end][1] == 7
+        @test isapprox(lc["aj"][end][2],ttt.Gaussian(24.999,5.420),1e-3)
+        @test isapprox(lc["cj"][end][2],ttt.Gaussian(25.001,5.420),13-3)
+    end
+#     @testset "One player" begin
+#         a = ttt.Rating() ; b = ttt.Rating() 
 #         
-#         @test lc["aj"][1][1] == 5
-#         @test lc["aj"][end][1] == 7
-#         @test isapprox(lc["aj"][end][2],ttt.Gaussian(24.999,5.420),1e-3)
-#         @test isapprox(lc["cj"][end][2],ttt.Gaussian(25.001,5.420),13-3)
+#         # Init
+#         g1 = ttt.Game([[a],[b]],[0,1])
+#         
+#         wp2 = a.N*g1.likelihoods[1][1]
+#         g2 = ttt.Game([[ttt.Rating(wp2)],[ttt.Rating(wp2)]],[0,1])
+#         lh2 = g2.likelihoods[1][1]*g2.likelihoods[2][1]
+#         # El likelihood de jugador repetido esta centrado en su within prior
+#         isapprox(wp2.mu, lh2.mu)
+#         
+#         wp3 = wp2*lh2
+#         isapprox(wp2.mu, wp3.mu)
+#         g3 = ttt.Game([[ttt.Rating(wp3)],[ttt.Rating(a.N*g1.likelihoods[1][1])]],[0,1])
+#         g2bis = ttt.Game([[ttt.Rating(wp2)],[ttt.Rating(a.N*g1.likelihoods[1][1])]],[0,1])
 #     end
 end
 

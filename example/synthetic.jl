@@ -54,7 +54,7 @@ end
     batches = [1,1,1,1,1,1,1,1,1,1,1,1,1]
     Nbeta = ttt.Gaussian(0.0,0.5)
         
-    for i in 1:100
+    for i in 1:150
         push!(events, [["ai"],["aj"]])
         push!(results, [0,1])
         push!(batches, 1)
@@ -82,8 +82,9 @@ end
     end
     
     # S - Shape
-    #plot(predicciones_mle,predicciones_mle)
-    #plot!(predicciones_mle,predicciones_aiaj)
+    using Plots
+    plot(predicciones_mle,predicciones_mle,legend=(-10.0, 10.0))
+    plot!(predicciones_mle,predicciones_aiaj)
     #plot!(predicciones_mle,predicciones_bibj)
     
     df = DataFrame(mle = predicciones_mle
@@ -285,7 +286,6 @@ end
     results = [ perf_agent[i] > perf_target[i] ? [0,1] : [1,0] for i in 1:1000 ]
     batches= [i for i in 1:1000 ]
     
-
     selected_gammas = [0.005,0.01,0.015,0.02,0.025]
     
     gammas = [gamma for gamma in 0.001:0.001:0.04]
@@ -311,8 +311,12 @@ end
     #plot([g for g in gammas ],evidencias_ts)
     #plot!([g for g in gammas ] ,evidencias_ttt)
     
+    #plot(mean_agent )
+    #plot!(learning_curves[3])
+    
+    
     @test 0.015 == gammas[argmax(evidencias_ttt)]
-
+    
     
     df = DataFrame(gammas = gammas
                     ,evidencias_ts = evidencias_ts
