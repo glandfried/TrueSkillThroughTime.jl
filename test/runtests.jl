@@ -164,9 +164,9 @@ using Test
     end
     @testset "Forget" begin
         gamma = 0.15*25.0/3
-        r = ttt.Rating(25.,1e-7,25.0/6,gamma)
-        @test isapprox(ttt.forget(r,5).N.sigma,sqrt(5*gamma^2))
-        @test isapprox(ttt.forget(r,1).N.sigma,sqrt(1*gamma^2))
+        g = ttt.Gaussian(25.,1e-7)
+        @test isapprox(ttt.forget(g,gamma,5).sigma,sqrt(5*gamma^2))
+        @test isapprox(ttt.forget(g,gamma,1).sigma,sqrt(1*gamma^2))
     end
     @testset "One event each" begin
         agents = Dict{String,ttt.Agent}()
@@ -213,13 +213,14 @@ using Test
         
         @test isapprox(ttt.posterior(h.batches[1],"aa"),ttt.Gaussian(29.205,7.19448),1e-3)
         
-        observed = h.batches[2].skills["aa"].forward.N.sigma 
+        observed = h.batches[2].skills["aa"].forward.sigma 
         gamma = 0.15*25.0/3
         expected = sqrt((gamma*1)^2 +  ttt.posterior(h.batches[1],"aa").sigma^2)
         @test isapprox(observed, expected)
         
         observed = ttt.posterior(h.batches[2],"aa")
-        g = ttt.Game([[h.batches[2].skills["aa"].forward],[h.batches[2].skills["c"].forward]],[1,0])
+        
+        g = ttt.Game(ttt.within_priors(h.batches[2], 1),[1,0])
         expected = ttt.posteriors(g)[1][1]
         @test isapprox(observed, expected, 1e-7)
     end
@@ -287,8 +288,8 @@ using Test
         results = [[0,1],[1,0],[0,1]]
         env = ttt.Environment(mu=0.0,sigma=6.0, beta=1.0, gamma=0.05, iter=100)
         
-        h = ttt.History(events=events, results=results, env=env)
-        step , iter = ttt.convergence(h)
+        @time h = ttt.History(events=events, results=results, env=env)
+        @time step , iter = ttt.convergence(h)
         @test isapprox(ttt.posterior(h.batches[1],"a"),ttt.Gaussian( 0.001,2.395),1e-3)
         @test isapprox(ttt.posterior(h.batches[1],"b"),ttt.Gaussian(-0.001,2.396),1e-3)
         @test isapprox(ttt.posterior(h.batches[3],"b"),ttt.Gaussian( 0.001,2.396),1e-3)
@@ -298,8 +299,8 @@ using Test
         results = [[0,1],[1,0],[0,1]]
         env = ttt.Environment(mu=0.0,sigma=6.0, beta=1.0, gamma=0.05, iter=100)
         
-        h = ttt.History(events=events, results=results, times = [0, 10, 20], env=env)
-        step , iter = ttt.convergence(h)
+        @time h = ttt.History(events=events, results=results, times = [0, 10, 20], env=env)
+        @time step , iter = ttt.convergence(h)
         @test isapprox(ttt.posterior(h.batches[1],"a"),ttt.Gaussian( 0.005,2.404),1e-3)
         @test isapprox(ttt.posterior(h.batches[1],"b"),ttt.Gaussian(-0.016,2.404),1e-3)
         @test isapprox(ttt.posterior(h.batches[3],"b"),ttt.Gaussian( 0.017,2.406),1e-3)
@@ -331,29 +332,26 @@ using Test
             priors[k] = ttt.Rating(mu=0.0, sigma=1e-7, beta=0.0, gamma=0.2) 
         end
         
-        h = ttt.History(events=events, results=results, priors=priors, env=env)
-        step , iter = ttt.convergence(h)
-        @test isapprox( ttt.posterior(h.batches[1],"a_b"), ttt.Gaussian(mu=0.0 ,sigma=0.0), 1e-3 )
-        @test isapprox( ttt.posterior(h.batches[3],"e_f"), ttt.Gaussian(mu=-0.002 ,sigma=0.2), 1e-3)
+        @time h = ttt.History(events=events, results=results, priors=priors, env=env)
+        @time step , iter = ttt.convergence(h)
+        @test isapprox( ttt.posterior(h.batches[1],"a_b"), ttt.Gaussian(mu=0.0 ,sigma=0.0), 1e-4 )
+        @test isapprox( ttt.posterior(h.batches[3],"e_f"), ttt.Gaussian(mu=-0.002 ,sigma=0.2), 1e-4)
     end
     @testset "Memory Size" begin
         composition = [ [["a"],["b"]], [["a"],["c"]] , [["b"],["c"]] ]
         results = [[0,1],[1,0],[0,1]]
         env = ttt.Environment(mu=0.0,sigma=6.0, beta=1.0, gamma=0.05, iter=100)
         
-        
         h = ttt.History(events=composition, results=results, times = [0, 10, 20], env=env)
-        @test Base.summarysize(h) < 4400
-        @test Base.summarysize(h.batches) < 3505
-        @test Base.summarysize(h.agents) < 850
-        @test Base.summarysize(h.batches[1]) < 1150
+        @test Base.summarysize(h) < 3600
+        @test Base.summarysize(h.batches) - Base.summarysize(h.agents) < 2800
+        @test Base.summarysize(h.agents) < 680
+        @test Base.summarysize(h.batches[2]) - Base.summarysize(h.agents)  < 910
         
-        @test (Base.summarysize(composition) ) * 7.5 < Base.summarysize(h)
-        @test (Base.summarysize(composition) ) * 8 > Base.summarysize(h)
+        @test Base.summarysize(h) < Base.summarysize(composition)  * 6.2 
         
-        Base.summarysize(h.batches)
-        @test Base.summarysize(h.batches[1].skills) == 794
-        @test Base.summarysize(h.batches[1].events) == 346
+        @test Base.summarysize(h.batches[1].skills) == 586
+        @test Base.summarysize(h.batches[1].events) == 314
     end
     @testset "Learning curves" begin
         events = [ [["aj"],["bj"]],[["bj"],["cj"]], [["cj"],["aj"]] ]
