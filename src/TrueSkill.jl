@@ -1,9 +1,4 @@
 module TrueSkill
-begin
-#using Parameters
-#import SpecialFunctions
-
-
 
 global const BETA = 1.0::Float64
 global const MU = 0.0::Float64
@@ -16,6 +11,8 @@ global const sqrt2 = sqrt(2)
 global const sqrt2pi = sqrt(2*pi)
 global const PI = 1/(SIGMA^2)
 global const TAU = MU*PI
+global const minInt64 = (-9223372036854775808)::Int64
+global const maxInt64 = ( 9223372036854775807)::Int64
 
 struct Environment
     mu::Float64
@@ -376,6 +373,7 @@ end
 mutable struct Agent
     prior::Rating
     message::Gaussian
+    last_time::Int64
 end
 function receive(agent::Agent, elapsed::Int64)
     if agent.message != Ninf
@@ -385,9 +383,10 @@ function receive(agent::Agent, elapsed::Int64)
     end
     return res
 end
-function clean(agents::Dict{String,Agent})
+function clean(agents::Dict{String,Agent}, last_time::Bool=false)
     for a in keys(agents)
         agents[a].message = Ninf
+        if last_time agents[a].last_time = minInt64 end
     end
 end
 mutable struct Item
@@ -405,16 +404,45 @@ end
 function outputs(event::Event)
     return [ team.output for team in event.teams]
 end
+function get_composition(events::Vector{Event})
+    res = Vector{Vector{Vector{String}}}()
+    for e in events
+        event = Vector{Vector{String}}()
+        for t in e.teams
+            team = Vector{String}()
+            for it in t.items
+                push!(team,it.agent)
+            end
+            push!(event,team)
+        end
+        push!(res,event)
+    end
+    return res 
+end
+function get_results(events::Vector{Event})
+    res = Vector{Vector{Int64}}()
+    for e in events
+        op = Vector{Int64}()
+        for t in e.teams
+            push!(op,t.output)
+        end
+        push!(res,op)
+    end
+    return res 
+end
+function compute_elapsed(last_time::Int64, actual_time::Int64)
+    return last_time == minInt64 ? 0 : ( last_time == maxInt64 ? 1 : (actual_time - last_time))
+end
 mutable struct Batch
     time::Int64
     events::Vector{Event}
     skills::Dict{String,Skill}
     agents::Dict{String,Agent}
-    function Batch(composition::Vector{Vector{Vector{String}}}, results::Vector{Vector{Int64}} ,time::Int64, last_time::Dict{String,Int64}=Dict{String,Int64}() , agents::Dict{String,Agent}=Dict{String,Agent}(), env::Environment=Environment())
+    function Batch(composition::Vector{Vector{Vector{String}}}, results::Vector{Vector{Int64}} ,time::Int64, agents::Dict{String,Agent}=Dict{String,Agent}(), env::Environment=Environment())
         (length(composition)!= length(results)) && throw(error("length(events)!= length(results)"))
         
         this_agents = Set(vcat((composition...)...))
-        elapsed = Dict([ (a, !haskey(last_time, a) ? 0 : ( last_time[a] == -1 ? 1 : (time - last_time[a]) ) ) for a in this_agents  ])
+        elapsed = Dict([ (a, compute_elapsed(agents[a].last_time, time) ) for a in this_agents  ])
         skills = Dict([ (a, Skill(receive(agents[a],elapsed[a]) ,Ninf ,Ninf , elapsed[a])) for a in this_agents  ])
         events = [Event([Team([Item(composition[e][t][a], Ninf) for a in 1:length(composition[e][t]) ] 
                               ,results[e][t]  ) for t in 1:length(composition[e]) ]
@@ -426,13 +454,33 @@ mutable struct Batch
         return b
     end
     function Batch(;events::Vector{Vector{Vector{String}}}, results::Vector{Vector{Int64}} 
-                 ,time::Int64=0, last_time::Dict{String,Int64}=Dict{String,Int64}() , agents::Dict{String,Agent}=Dict{String,Agent}(), env::Environment=Environment())
-        Batch(events, results, time, last_time, agents, env)
+                 ,time::Int64=0 , agents::Dict{String,Agent}=Dict{String,Agent}(), env::Environment=Environment())
+        Batch(events, results, time, agents, env)
     end
 end
 
 Base.show(io::IO, b::Batch) = print("Batch(time=", b.time, ", events=", b.events, ")")
 Base.length(b::Batch) = length(b.events)
+
+function add_events(b::Batch, composition::Vector{Vector{Vector{String}}}, results::Vector{Vector{Int64}})
+    this_agents = Set(vcat((composition...)...))
+    for a in this_agents#a="c"
+        elapsed = compute_elapsed(b.agents[a].last_time , b.time )  
+        if !haskey(b.skills,a)
+            b.skills[a] = Skill(receive(b.agents[a],elapsed) ,Ninf ,Ninf , elapsed)
+        else
+            b.skills[a].elapsed = elapsed
+            b.skills[a].forward = receive(b.agents[a],elapsed)
+        end
+    end
+    from = length(b)+1
+    for e in 1:length(composition)
+        event = Event([Team([Item(composition[e][t][a], Ninf) for a in 1:length(composition[e][t]) ] 
+                              ,results[e][t]  ) for t in 1:length(composition[e]) ] , 0.0)
+        push!(b.events, event)
+    end
+    iteration(b, from)
+end
 function posterior(b::Batch, agent::String)#agent="a_b"
     return b.skills[agent].likelihood*b.skills[agent].backward*b.skills[agent].forward 
 end
@@ -456,8 +504,8 @@ function within_priors(b::Batch, event::Int64)#event=1
     end
     return res
 end
-function iteration(b::Batch)
-    for e in 1:length(b)#e=1
+function iteration(b::Batch, from::Int64 = 1)
+    for e in from:length(b)#e=1
         
         g = Game(within_priors(b, e), outputs(b.events[e]))
         
@@ -471,10 +519,10 @@ function iteration(b::Batch)
         b.events[e].evidence = g.evidence
     end
 end
-function convergence(b::Batch, epsilon::Float64=1e-6)
+function convergence(b::Batch, epsilon::Float64=1e-6, iterations::Int64 = 20)
     iter = 0::Int64    
     step = (Inf, Inf)
-    while (step > epsilon) & (iter < 10)
+    while (step > epsilon) & (iter < iterations)
         old = copy(posteriors(b))
         iteration(b)
         step = diff(old, posteriors(b))
@@ -489,19 +537,15 @@ function backward_prior_out(b::Batch, agent::String)
     N = b.skills[agent].likelihood*b.skills[agent].backward
     return forget(N, b.agents[agent].prior.gamma, b.skills[agent].elapsed) 
 end
-function new_backward_info(b::Batch, agents::Dict{String,Agent})
+function new_backward_info(b::Batch)
     for a in keys(b.skills)
-        b.skills[a].backward = agents[a].message
+        b.skills[a].backward = b.agents[a].message
     end
     return iteration(b)
 end
-function new_forward_info(b::Batch, agents::Dict{String,Agent})
+function new_forward_info(b::Batch)
     for a in keys(b.skills)
-        if agents[a].message != Ninf
-            b.skills[a].forward = forget(agents[a].message, agents[a].prior.gamma, b.skills[a].elapsed)
-        else
-            b.skills[a].forward = agents[a].prior.N  
-        end
+        b.skills[a].forward = receive(b.agents[a], b.skills[a].elapsed) 
     end
     return iteration(b)
 end
@@ -510,12 +554,13 @@ mutable struct History
     batches::Vector{Batch}
     agents::Dict{String,Agent}
     env::Environment
+    time::Bool
     function History(events::Vector{Vector{Vector{String}}},results::Vector{Vector{Int64}},times::Vector{Int64}=Int64[],priors::Dict{String,Rating}=Dict{String,Rating}(), env::Environment=Environment())
         (length(events) != length(results)) && throw(error("length(events) != length(results)"))
         (length(times) > 0) & (length(events) != length(times)) && throw(error("length(times) > 0) & (length(events) != length(times))"))
         
-        agents = Dict([ (a, Agent(haskey(priors, a) ? priors[a] : Rating(env.mu, env.sigma, env.beta, env.gamma), Ninf)) for a in Set(vcat((events...)...)) ])
-        h = new(length(events), Vector{Batch}(), agents, env)
+        agents = Dict([ (a, Agent(haskey(priors, a) ? priors[a] : Rating(env.mu, env.sigma, env.beta, env.gamma), Ninf, minInt64)) for a in Set(vcat((events...)...)) ])
+        h = new(length(events), Vector{Batch}(), agents, env, length(times)>0)
         trueskill(h, events, results, times)
         return h
     end
@@ -529,16 +574,15 @@ Base.show(io::IO, h::History) = print("History(Size=", h.size
                                      ,", Batches=", length(h.batches)
                                     ,", Agents=", length(h.agents), ")")
 function trueskill(h::History, composition::Vector{Vector{Vector{String}}},results::Vector{Vector{Int64}}, times::Vector{Int64})
-    last_time = Dict{String,Int64}()
     o = length(times)>0 ? sortperm(times) : [i for i in 1:length(composition)]
     i = 1::Int64
     while i <= length(h)
         j, t = i, length(times) == 0 ? i : times[o[i]]
         while ((length(times)>0) & (j < length(h)) && (times[o[j+1]] == t)) j += 1 end
-        b = Batch(composition[o[i:j]],results[o[i:j]], t, last_time, h.agents, h.env)        
+        b = Batch(composition[o[i:j]],results[o[i:j]], t, h.agents, h.env)        
         push!(h.batches,b)
         for a in keys(b.skills)
-            last_time[a] = length(times) == 0 ? -1 : t
+            h.agents[a].last_time = length(times) == 0 ? maxInt64 : t
             h.agents[a].message = forward_prior_out(b,a)
         end
         i = j + 1
@@ -560,7 +604,7 @@ function iteration(h::History)
             h.agents[a].message = backward_prior_out(h.batches[j+1],a)
         end
         old = copy(posteriors(h.batches[j]))
-        new_backward_info(h.batches[j], h.agents)
+        new_backward_info(h.batches[j])
         step = max(step, diff(old, posteriors(h.batches[j])))
     end
     
@@ -570,7 +614,7 @@ function iteration(h::History)
             h.agents[a].message = forward_prior_out(h.batches[j-1],a)
         end
         old = copy(posteriors(h.batches[j]))
-        new_forward_info(h.batches[j], h.agents)
+        new_forward_info(h.batches[j])
         step = max(step, diff(old, posteriors(h.batches[j])))
     end
     
@@ -606,25 +650,66 @@ end
 function log_evidence(h::History)
    return sum([log(event.evidence) for b in h.batches for event in b.events])
 end
-
-end
-
-if false
-
-    events = [ [["a","a_b","b"],["c","c_d","d"]]
-                , [["e","e_f","f"],["b","b_c","c"]]
-                , [["a","a_d","d"],["e","e_f","f"]]  ]
-    results = [[0,1],[1,0],[0,1]]
-    env = Environment(mu=0.0,sigma=6.0, beta=1.0, gamma=0.0)
-    priors = Dict{String,Rating}()
-    for k in ["a_b", "c_d", "e_f", "b_c", "a_d", "e_f"]
-        priors[k] = Rating(mu=0.0, sigma=1e-7, beta=0.0, gamma=0.2) 
+function add_events(h::History,composition::Vector{Vector{Vector{String}}},results::Vector{Vector{Int64}},times::Vector{Int64}=Int64[],priors::Dict{String,Rating}=Dict{String,Rating}())
+    
+    (length(times)>0) & !h.time && throw(error("length(times)>0 but !h.time"))
+    (length(times)==0) & h.time && throw(error("length(times)==0 but h.time"))
+    (length(composition) != length(results)) && throw(error("length(composition) != length(results)"))
+    (length(times) > 0) & (length(composition) != length(times)) && throw(error("length(times) > 0) & (length(composition) != length(times))"))
+        
+        
+    this_agents = Set(vcat((composition...)...))
+    for a in this_agents
+        if !haskey(h.agents,a)
+            h.agents[a] = Agent(haskey(priors, a) ? priors[a] : Rating(h.env.mu, h.env.sigma, h.env.beta, h.env.gamma), Ninf, minInt64)
+        end
     end
     
-    h = History(events=events, results=results, priors=priors, env=env)
-    step , iter = convergence(h)
+    clean(h.agents,true)
+    n = length(composition)
+    o = length(times)>0 ? sortperm(times) : [i for i in 1:length(composition)]
+    i = 1::Int64; k = 1::Int64
+    while i <= n
+        j, t = i, length(times) == 0 ? i : times[o[i]]
+        while ((length(times)>0) & (j < n) && (times[o[j+1]] == t)) j += 1 end
+        while (!h.time & (h.size > k) ) || (h.time && (length(h.batches) >= k) && (h.batches[k].time < t))
+            b = h.batches[k]
+            if (k>1) new_forward_info(b) end
+            for a in intersect(keys(b.skills), this_agents)#a ="a"
+                b.skills[a].elapsed = compute_elapsed(b.agents[a].last_time , b.time )
+                h.agents[a].last_time = length(times) == 0 ? maxInt64 : b.time
+                h.agents[a].message = forward_prior_out(b,a)
+            end
+            k += 1
+        end
+        if (h.time && (length(h.batches) >= k) && (h.batches[k].time == t))
+            b = h.batches[k]
+            add_events(b, composition[o[i:j]],results[o[i:j]])
+        else
+            if !h.time k = k + 1 end
+            b =  Batch(composition[o[i:j]],results[o[i:j]], t, h.agents, h.env)        
+            insert!(h.batches,  k , b)
+            if h.time k = k + 1 end
+        end
+        for a in keys(b.skills)#a="a"
+            h.agents[a].last_time = length(times) == 0 ? maxInt64 : t
+            h.agents[a].message = forward_prior_out(b,a)
+        end
+        i = j + 1
+    end
+    while h.time && (length(h.batches) >= k) 
+        b = h.batches[k]
+        new_forward_info(b)
+        for a in intersect(keys(b.skills), this_agents)#a ="a"
+            b.skills[a].elapsed = compute_elapsed(b.agents[a].last_time , b.time )
+            h.agents[a].last_time = length(times) == 0 ? maxInt64 : b.time
+            h.agents[a].message = forward_prior_out(b,a)
+        end
+        k += 1
+    end
+    h.size = h.size + n
+    iteration(h)
+end
     
-end    
-
 
 end # module

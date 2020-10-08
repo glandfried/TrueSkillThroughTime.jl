@@ -171,7 +171,7 @@ using Test
     @testset "One event each" begin
         agents = Dict{String,ttt.Agent}()
         for k in ["a", "b", "c", "d", "e", "f"]
-            agents[k] = ttt.Agent(ttt.Rating(25., 25.0/3, 25.0/6, 25.0/300 ) , ttt.Ninf)
+            agents[k] = ttt.Agent(ttt.Rating(25., 25.0/3, 25.0/6, 25.0/300 ) , ttt.Ninf, ttt.minInt64)
         end
         events = [ [["a"],["b"]], [["c"],["d"]] , [["e"],["f"]] ]
         results = [[0,1],[1,0],[0,1]]
@@ -188,7 +188,7 @@ using Test
     @testset "Same strength" begin
         agents= Dict{String,ttt.Agent}()
         for k in ["a", "b", "c", "d", "e", "f"]
-            agents[k] = ttt.Agent(ttt.Rating(25., 25.0/3, 25.0/6, 25.0/300 ) , ttt.Ninf)
+            agents[k] = ttt.Agent(ttt.Rating(25., 25.0/3, 25.0/6, 25.0/300 ) , ttt.Ninf, ttt.minInt64)
         end
         events = [ [["a"],["b"]], [["a"],["c"]] , [["b"],["c"]] ]
         results = [[0,1],[1,0],[0,1]]
@@ -201,6 +201,26 @@ using Test
         @test isapprox(ttt.posterior(b,"b"),ttt.Gaussian(25.000,5.419),1e-3)
         @test isapprox(ttt.posterior(b,"c"),ttt.Gaussian(25.000,5.419),1e-3)
     end
+    @testset "Add events into a batch" begin
+        agents= Dict{String,ttt.Agent}()
+        for k in ["a", "b", "c", "d", "e", "f"]
+            agents[k] = ttt.Agent(ttt.Rating(25., 25.0/3, 25.0/6, 25.0/300 ) , ttt.Ninf, ttt.minInt64)
+        end
+        events = [ [["a"],["b"]], [["a"],["c"]] , [["b"],["c"]] ]
+        results = [[0,1],[1,0],[0,1]]
+        b = ttt.Batch(events = events, results = results, agents = agents)
+        iter = ttt.convergence(b)
+        @test isapprox(ttt.posterior(b,"a"),ttt.Gaussian(25.000,5.419),1e-3)
+        @test isapprox(ttt.posterior(b,"b"),ttt.Gaussian(25.000,5.419),1e-3)
+        @test isapprox(ttt.posterior(b,"c"),ttt.Gaussian(25.000,5.419),1e-3)
+        ttt.add_events(b,events,results)
+        @test length(b.events) == 6 
+        iter = ttt.convergence(b,1e-6,20)
+        @test iter == 20
+        @test isapprox(ttt.posterior(b,"a"),ttt.Gaussian(25.000,3.88),1e-3)
+        @test isapprox(ttt.posterior(b,"b"),ttt.Gaussian(25.000,3.88),1e-3)
+        @test isapprox(ttt.posterior(b,"c"),ttt.Gaussian(25.000,3.88),1e-3)
+        end
     @testset "TrueSkill initalization" begin
         events = [ [["aa"],["b"]], [["aa"],["c"]] , [["b"],["c"]] ]
         results = [[0,1],[1,0],[0,1]]
@@ -345,10 +365,10 @@ using Test
         h = ttt.History(events=composition, results=results, times = [0, 10, 20], env=env)
         @test Base.summarysize(h) < 3600
         @test Base.summarysize(h.batches) - Base.summarysize(h.agents) < 2800
-        @test Base.summarysize(h.agents) < 680
+        @test Base.summarysize(h.agents) < 700
         @test Base.summarysize(h.batches[2]) - Base.summarysize(h.agents)  < 910
         
-        @test Base.summarysize(h) < Base.summarysize(composition)  * 6.2 
+        @test Base.summarysize(h) < Base.summarysize(composition)  * 6.5
         
         @test Base.summarysize(h.batches[1].skills) == 586
         @test Base.summarysize(h.batches[1].events) == 314
@@ -368,6 +388,57 @@ using Test
         @test lc["aj"][end][1] == 7
         @test isapprox(lc["aj"][end][2],ttt.Gaussian(24.999,5.420),1e-3)
         @test isapprox(lc["cj"][end][2],ttt.Gaussian(25.001,5.420),13-3)
+    end
+    @testset "Add events into History 1" begin
+        events = [ [["a"],["b"]], [["a"],["c"]] , [["b"],["c"]] ]
+        results = [[0,1],[1,0],[0,1]]
+        env = ttt.Environment(mu=0.0, sigma=2.0, beta=1.0, gamma=0.0)
+        
+        h = ttt.History(events=events, results=results, env=env)
+        step , iter = ttt.convergence(h)
+        @test (h.batches[3].skills["b"].elapsed == 1) & (h.batches[3].skills["c"].elapsed == 1)
+        @test isapprox(ttt.posterior(h.batches[1],"a"),ttt.Gaussian(0.0,1.301),1e-3)
+        @test isapprox(ttt.posterior(h.batches[1],"b"),ttt.Gaussian(0.0,1.301),1e-3)
+        @test isapprox(ttt.posterior(h.batches[3],"b"),ttt.Gaussian(0.0,1.301),1e-3)
+        ttt.add_events(h, events, results)
+        
+        @test length(h.batches) == 6
+        @test [ttt.get_composition(b.events) for b in h.batches] == [ [[["a"], ["b"]]], [[["a"], ["c"]]], [[["b"], ["c"]]]
+        , [[["a"], ["b"]]], [[["a"], ["c"]]], [[["b"], ["c"]]] ]
+
+        
+        step , iter = ttt.convergence(h)
+        @test isapprox(ttt.posterior(h.batches[1],"a"),ttt.Gaussian(0.0,0.931),1e-3)
+        @test isapprox(ttt.posterior(h.batches[4],"a"),ttt.Gaussian(0.0,0.931),1e-3)
+        @test isapprox(ttt.posterior(h.batches[4],"b"),ttt.Gaussian(0.0,0.931),1e-3)
+        @test isapprox(ttt.posterior(h.batches[6],"b"),ttt.Gaussian(0.0,0.931),1e-3)
+    end
+    @testset "Add events into History 2" begin
+        composition = [ [["a"],["b"]], [["a"],["c"]] , [["b"],["c"]] ]
+        results = [[0,1],[1,0],[0,1]]
+        times = [0,10,20]
+        env = ttt.Environment(mu=0.0, sigma=2.0, beta=1.0, gamma=0.0)
+        h = ttt.History(events=composition, results=results, times=times, env=env)
+        step , iter = ttt.convergence(h)
+        times = [15,10,0]
+        ttt.add_events(h, composition, results, times)
+        @test length(h.batches) == 4
+        @test [length(b) for b in h.batches] == [2,2,1,1]
+        @test [ttt.get_composition(b.events) for b in h.batches] == [ 
+        [[["a"], ["b"]], [["b"], ["c"]]] ,
+        [[["a"], ["c"]], [["a"], ["c"]]] ,
+        [[["a"], ["b"]]] ,
+        [[["b"], ["c"]]]
+        ]
+        @test [ttt.get_results(b.events) for b in h.batches] == [ [[0, 1], [0, 1]], [[1, 0], [1, 0]], [[0, 1]], [[0, 1]] ]
+        @test (h.batches[1].skills["c"].elapsed == 0) & (h.batches[end].skills["c"].elapsed == 10)
+        @test (h.batches[1].skills["a"].elapsed == 0) & (h.batches[3].skills["a"].elapsed == 5)
+        @test (h.batches[1].skills["b"].elapsed == 0) & (h.batches[end].skills["b"].elapsed == 5)
+        
+        step , iter = ttt.convergence(h)
+        @test isapprox(ttt.posterior(h.batches[1],"b"),ttt.posterior(h.batches[end],"b"),1e-4)
+        @test isapprox(ttt.posterior(h.batches[1],"c"),ttt.posterior(h.batches[end],"c"),1e-4)
+        @test isapprox(ttt.posterior(h.batches[1],"c"),ttt.posterior(h.batches[1],"b"),1e-4)
     end
 #     @testset "One player" begin
 #         a = ttt.Rating() ; b = ttt.Rating() 
