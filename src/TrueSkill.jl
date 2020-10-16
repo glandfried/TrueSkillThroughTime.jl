@@ -195,7 +195,7 @@ function Base.isapprox(N::Gaussian, M::Gaussian, atol::Real=0)
     return (abs(N.mu - M.mu) < atol) & (abs(N.sigma - M.sigma) < atol)
 end
 function forget(N::Gaussian, gamma::Float64, t::Int64)
-    return Gaussian(N.mu, sqrt(N.sigma^2 + t*(gamma)^2))
+    return Gaussian(N.mu, sqrt(N.sigma^2 + t*gamma^2))
 end 
 function compute_margin(p_draw::Float64, sd::Float64)
     _N = Gaussian(0.0, sd )
@@ -219,44 +219,10 @@ struct Rating
     end
 end
 Base.show(io::IO, r::Rating) = print("Rating(", round(r.N.mu,digits=3)," ,", round(r.N.sigma,digits=3), ")")
-Base.copy(r::Rating) = Rating(r.N,r.beta,r.gamma)
 function performance(R::Rating)
-    _sigma = sqrt(R.N.sigma^2 + R.beta^2)
-    return Gaussian(R.N.mu, _sigma)
+    return Gaussian(R.N.mu, sqrt(R.N.sigma^2 + R.beta^2))
 end
-mutable struct Game
-    teams::Vector{Vector{Rating}}
-    result::Vector{Int64}
-    p_draw::Float64
-    likelihoods::Vector{Vector{Gaussian}}
-    evidence::Float64
-    function Game(teams::Vector{Vector{Rating}}, result::Vector{Int64},p_draw::Float64=0.0)
-        (length(teams) != length(result)) && throw(error("length(teams) != length(result)"))
-        ((0.0 > p_draw) | (1.0 <= p_draw)) &&  throw(error("0.0 <= Draw probability < 1.0"))
-        
-        _g = new(teams,result,p_draw,[],0.0)
-        likelihoods(_g)
-        return _g
-    end
-end        
-Base.length(G::Game) = length(G.result)
-function size(G::Game)
-    return [length(g.teams[e]) for e in 1:length(g.teams)]
-end
-function performance(G::Game,i::Int64)
-    res = N00
-    for r in G.teams[i]
-        res += performance(r)
-    end
-    return res
-end 
-function draw_performance(G::Game,i::Int64)
-    res = N00
-    for r in G.teams[i]
-        res += r.draw.sigma < Inf ? trunc(r.draw,0.,false) : Ninf
-    end
-    return res
-end 
+
 mutable struct team_messages
     prior::Gaussian
     likelihood_lose::Gaussian
@@ -303,12 +269,48 @@ end
 function p(dm::diff_messages)
     return dm.prior*dm.likelihood
 end
+
 function Base.max(tuple1::Tuple{Float64,Float64}, tuple2::Tuple{Float64,Float64})
     return max(tuple1[1],tuple2[1]), max(tuple1[2],tuple2[2])
 end
 function Base.:>(tuple::Tuple{Float64,Float64}, threshold::Float64)
     return (tuple[1] > threshold) | (tuple[2] > threshold)
 end
+
+
+mutable struct Game
+    teams::Vector{Vector{Rating}}
+    result::Vector{Int64}
+    p_draw::Float64
+    likelihoods::Vector{Vector{Gaussian}}
+    evidence::Float64
+    function Game(teams::Vector{Vector{Rating}}, result::Vector{Int64},p_draw::Float64=0.0)
+        (length(teams) != length(result)) && throw(error("length(teams) != length(result)"))
+        ((0.0 > p_draw) | (1.0 <= p_draw)) &&  throw(error("0.0 <= Draw probability < 1.0"))
+        
+        _g = new(teams,result,p_draw,[],0.0)
+        likelihoods(_g)
+        return _g
+    end
+end        
+Base.length(G::Game) = length(G.result)
+function size(G::Game)
+    return [length(team) for team in g.teams]
+end
+function performance(G::Game,i::Int64)
+    res = N00
+    for r in G.teams[i]
+        res += performance(r)
+    end
+    return res
+end 
+function draw_performance(G::Game,i::Int64)
+    res = N00
+    for r in G.teams[i]
+        res += r.draw.sigma < Inf ? trunc(r.draw,0.,false) : Ninf
+    end
+    return res
+end 
 function likelihood_teams(g::Game)
     r = g.result
     o = sortperm(r)
@@ -405,30 +407,10 @@ function outputs(event::Event)
     return [ team.output for team in event.teams]
 end
 function get_composition(events::Vector{Event})
-    res = Vector{Vector{Vector{String}}}()
-    for e in events
-        event = Vector{Vector{String}}()
-        for t in e.teams
-            team = Vector{String}()
-            for it in t.items
-                push!(team,it.agent)
-            end
-            push!(event,team)
-        end
-        push!(res,event)
-    end
-    return res 
+    return [[[i.agent for i in t.items] for t in e.teams] for e in events]
 end
 function get_results(events::Vector{Event})
-    res = Vector{Vector{Int64}}()
-    for e in events
-        op = Vector{Int64}()
-        for t in e.teams
-            push!(op,t.output)
-        end
-        push!(res,op)
-    end
-    return res 
+    return [ [t.output for t in e.teams ] for e in events]
 end
 function compute_elapsed(last_time::Int64, actual_time::Int64)
     return last_time == minInt64 ? 0 : ( last_time == maxInt64 ? 1 : (actual_time - last_time))
@@ -491,18 +473,12 @@ function posteriors(b::Batch)
     end
     return res
 end
+function within_prior(b::Batch, item::Item)
+    prior = b.agents[item.agent].prior
+    return Rating(posterior(b,item.agent)/item.likelihood,prior.beta,prior.gamma)
+end
 function within_priors(b::Batch, event::Int64)#event=1
-    res = Vector{Vector{Rating}}()
-    for team in b.events[event].teams
-        res_team = Vector{Rating}()    
-        for item in team.items
-            prior = b.agents[item.agent].prior
-            r = Rating(posterior(b,item.agent)/item.likelihood,prior.beta,prior.gamma)
-            push!(res_team, r)
-        end
-        push!(res, res_team)
-    end
-    return res
+    return [ [within_prior(b,item) for item in team.items ] for team in b.events[event].teams ]
 end
 function iteration(b::Batch, from::Int64 = 1)
     for e in from:length(b)#e=1
@@ -570,7 +546,7 @@ mutable struct History
 end
 
 Base.length(h::History) = h.size
-Base.show(io::IO, h::History) = print("History(Size=", h.size
+Base.show(io::IO, h::History) = print("History(Events=", h.size
                                      ,", Batches=", length(h.batches)
                                     ,", Agents=", length(h.agents), ")")
 function trueskill(h::History, composition::Vector{Vector{Vector{String}}},results::Vector{Vector{Int64}}, times::Vector{Int64})
@@ -626,7 +602,7 @@ function iteration(h::History)
     
     return step
 end
-function convergence(h::History, verbose = true)
+function convergence(h::History, verbose = false)
     step = (Inf, Inf)::Tuple{Float64,Float64}
     iter = 1::Int64
     while (step > h.env.epsilon) & (iter <= h.env.iter)
@@ -635,14 +611,15 @@ function convergence(h::History, verbose = true)
         iter += 1
         verbose && println(", step = ", step)
     end
-    println("End")
+    verbose && println("End")
     return step, iter
 end
 function learning_curves(h::History)
     res = Dict{String,Array{Tuple{Int64,Gaussian}}}()
     for b in h.batches
         for a in keys(b.skills)
-            res[a] = haskey(res, a) ? push!(res[a], (b.time, posterior(b,a))) : [(b.time,posterior(b,a))]
+            t_p = (b.time, posterior(b,a))
+            res[a] = haskey(res, a) ? push!(res[a],t_p) : [t_p]
         end
     end
     return res
@@ -710,6 +687,13 @@ function add_events(h::History,composition::Vector{Vector{Vector{String}}},resul
     h.size = h.size + n
     iteration(h)
 end
-    
+
+# 
+# ta = [Rating(0.0,1.0),Rating(0.0,1.0),Rating(0.0,1.0)]
+# tb = [Rating(0.0,1.0),Rating(0.0,1.0),Rating(0.0,1.0)]
+# posteriors(Game([ta,tb],[1,0]))
+
+
+
 
 end # module
