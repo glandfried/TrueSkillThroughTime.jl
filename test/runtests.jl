@@ -53,6 +53,14 @@ using Test
         post = ttt.posteriors(g)
         @test isapprox(post[1][1], ttt.Gaussian(28.896,0.996), 1e-3) 
         @test isapprox(post[2][1], ttt.Gaussian(32.189,6.062), 1e-3)
+        
+        ta = [ttt.Rating(1.139,0.531,1.0,0.2125)]
+        tb = [ttt.Rating(15.568,0.51,1.0,0.2125)]
+        g = ttt.Game([ta,tb], [1,0], 0.0)
+        @test isapprox(g.likelihoods[1][1].sigma, Inf)
+        @test isapprox(g.likelihoods[1][1].mu, 0.0)
+        @test isapprox(g.likelihoods[2][1].sigma, Inf)
+        
     end
     @testset "1vs1vs1" begin
         g = ttt.Game([[ttt.Rating(25.0,25.0/3,25.0/6,25.0/300)]
@@ -235,7 +243,7 @@ using Test
         
         observed = h.batches[2].skills["aa"].forward.sigma 
         gamma = 0.15*25.0/3
-        expected = sqrt((gamma*1)^2 +  ttt.posterior(h.batches[1],"aa").sigma^2)
+        expected = sqrt((gamma*1)^2 + ttt.posterior(h.batches[1],"aa").sigma^2)
         @test isapprox(observed, expected)
         
         observed = ttt.posterior(h.batches[2],"aa")
@@ -276,14 +284,14 @@ using Test
         @test isapprox(ttt.posterior(h2.batches[3],"cj"),ttt.Gaussian(25.001,5.420),1e-3)
     end
     @testset "TrueSkill Through Time" begin
-        events = [ [["a"],["b"]], [["a"],["c"]] , [["b"],["c"]] ]
+        composition = [ [["a"],["b"]], [["a"],["c"]] , [["b"],["c"]] ]
         results = [[0,1],[1,0],[0,1]]
         priors = Dict{String,ttt.Rating}()
         for k in ["a", "b", "c"]
             priors[k] = ttt.Rating(25., 25.0/3, 25.0/6, 25.0/300) 
         end
         
-        h = ttt.History(events, results, Int64[], priors)
+        h = ttt.History(composition, results, Int64[], priors)
         step , iter = ttt.convergence(h)
         @test (h.batches[3].skills["b"].elapsed == 1) & (h.batches[3].skills["c"].elapsed == 1)
         @test isapprox(ttt.posterior(h.batches[1],"a"),ttt.Gaussian(25.0002673,5.41938162),1e-5)
