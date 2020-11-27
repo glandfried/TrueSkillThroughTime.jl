@@ -139,14 +139,14 @@ function cdf(N::Gaussian, x::Float64)
     return (0.5 * erfc(z))::Float64
 end
 function pdf(N::Gaussian, x::Float64)
-    normalizer = (sqrt2pi * N.sigma)^-1
+    normalizer = (sqrt(2*pi) * N.sigma)^-1
     functional = exp( -((x - N.mu)^2) / (2*N.sigma ^2) ) 
     return (normalizer * functional)::Float64
 end
 function ppf(N::Gaussian, p::Float64)
     return N.mu - N.sigma * sqrt2  * erfcinv(2 * p)
 end 
-function trunc(N::Gaussian, margin::Float64, tie::Bool)
+function approx(N::Gaussian, margin::Float64, tie::Bool)
     #The range is [alpha, beta]
     if !tie
         _alpha = (margin-N.mu)/N.sigma
@@ -203,7 +203,7 @@ function compute_margin(p_draw::Float64, sd::Float64)
     return res 
 end
 struct Rating
-    N::Gaussian
+    prior::Gaussian
     beta::Float64
     gamma::Float64
     draw::Gaussian
@@ -218,9 +218,9 @@ struct Rating
         Rating(Gaussian(mu, sigma), beta, gamma, draw)
     end
 end
-Base.show(io::IO, r::Rating) = print("Rating(", round(r.N.mu,digits=3)," ,", round(r.N.sigma,digits=3), ")")
+Base.show(io::IO, r::Rating) = print("Rating(", round(r.prior.mu,digits=3)," ,", round(r.prior.sigma,digits=3), ")")
 function performance(R::Rating)
-    return Gaussian(R.N.mu, sqrt(R.N.sigma^2 + R.beta^2))
+    return Gaussian(R.prior.mu, sqrt(R.prior.sigma^2 + R.beta^2))
 end
 
 mutable struct team_messages
@@ -277,7 +277,6 @@ function Base.:>(tuple::Tuple{Float64,Float64}, threshold::Float64)
     return (tuple[1] > threshold) | (tuple[2] > threshold)
 end
 
-
 mutable struct Game
     teams::Vector{Vector{Rating}}
     result::Vector{Int64}
@@ -297,6 +296,14 @@ Base.length(G::Game) = length(G.result)
 function size(G::Game)
     return [length(team) for team in g.teams]
 end
+function performance(team::Vector{Rating})
+    p = N00
+    for r in team
+        p += performance(r)
+    end
+    return p
+end
+#TODO: reducir perf(game)
 function performance(G::Game,i::Int64)
     res = N00
     for r in G.teams[i]
@@ -307,7 +314,7 @@ end
 function draw_performance(G::Game,i::Int64)
     res = N00
     for r in G.teams[i]
-        res += r.draw.sigma < Inf ? trunc(r.draw,0.,false) : Ninf
+        res += r.draw.sigma < Inf ? approx(r.draw,0.,false) : Ninf
     end
     return res
 end 
@@ -329,14 +336,14 @@ function likelihood_teams(g::Game)
         step = (0., 0.)
         for e in 1:length(d)-1#e=1
             d[e].prior = posterior_win(t[e]) - posterior_lose(t[e+1])
-            d[e].likelihood = trunc(d[e].prior,margin[e],tie[e])/d[e].prior
+            d[e].likelihood = approx(d[e].prior,margin[e],tie[e])/d[e].prior
             likelihood_lose = posterior_win(t[e]) - d[e].likelihood
             step = max(step,delta(t[e+1].likelihood_lose,likelihood_lose))
             t[e+1].likelihood_lose = likelihood_lose
         end
         for e in length(d):-1:2
             d[e].prior = posterior_win(t[e]) - posterior_lose(t[e+1])
-            d[e].likelihood = trunc(d[e].prior,margin[e],tie[e])/d[e].prior
+            d[e].likelihood = approx(d[e].prior,margin[e],tie[e])/d[e].prior
             likelihood_win = (posterior_lose(t[e+1]) + d[e].likelihood)
             step = max(step,delta(t[e].likelihood_win,likelihood_win))
             t[e].likelihood_win = likelihood_win
@@ -345,7 +352,7 @@ function likelihood_teams(g::Game)
     end
     if length(d)==1
         d[1].prior = posterior_win(t[1]) - posterior_lose(t[2])
-        d[1].likelihood = trunc(d[1].prior,margin[1],tie[1])/d[1].prior
+        d[1].likelihood = approx(d[1].prior,margin[1],tie[1])/d[1].prior
     end
     t[1].likelihood_win = (posterior_lose(t[2]) + d[1].likelihood)
     t[end].likelihood_lose = (posterior_win(t[end-1]) - d[end].likelihood)
@@ -354,11 +361,11 @@ function likelihood_teams(g::Game)
 end
 function likelihoods(g::Game)
     m_t_ft = likelihood_teams(g)
-    g.likelihoods = [[ m_t_ft[e] - exclude(performance(g,e),g.teams[e][i].N) for i in 1:length(g.teams[e])] for e in 1:length(g)]
+    g.likelihoods = [[ m_t_ft[e] - exclude(performance(g,e),g.teams[e][i].prior) for i in 1:length(g.teams[e])] for e in 1:length(g)]
     return g.likelihoods
 end
 function posteriors(g::Game)
-    return [[ g.likelihoods[e][i] * g.teams[e][i].N for i in 1:length(g.teams[e])] for e in 1:length(g)]
+    return [[ g.likelihoods[e][i] * g.teams[e][i].prior for i in 1:length(g.teams[e])] for e in 1:length(g)]
 end
 mutable struct Skill
     forward::Gaussian
@@ -373,15 +380,15 @@ mutable struct Skill
     end
 end
 mutable struct Agent
-    prior::Rating
+    rating::Rating
     message::Gaussian
     last_time::Int64
 end
 function receive(agent::Agent, elapsed::Int64)
     if agent.message != Ninf
-        res = forget(agent.message, agent.prior.gamma, elapsed) 
+        res = forget(agent.message, agent.rating.gamma, elapsed) 
     else
-       res = agent.prior.N
+       res = agent.rating.prior
     end
     return res
 end
@@ -416,12 +423,13 @@ function compute_elapsed(last_time::Int64, actual_time::Int64)
     return last_time == minInt64 ? 0 : ( last_time == maxInt64 ? 1 : (actual_time - last_time))
 end
 mutable struct Batch
+    #TODO: Batch tiene que acceder al Environment
     time::Int64
     events::Vector{Event}
     skills::Dict{String,Skill}
     agents::Dict{String,Agent}
     function Batch(composition::Vector{Vector{Vector{String}}}, results::Vector{Vector{Int64}} ,time::Int64, agents::Dict{String,Agent}=Dict{String,Agent}(), env::Environment=Environment())
-        (length(composition)!= length(results)) && throw(error("length(events)!= length(results)"))
+        (length(composition)!= length(results)) && throw(error("length(composition)!= length(results)"))
         
         this_agents = Set(vcat((composition...)...))
         elapsed = Dict([ (a, compute_elapsed(agents[a].last_time, time) ) for a in this_agents  ])
@@ -474,8 +482,8 @@ function posteriors(b::Batch)
     return res
 end
 function within_prior(b::Batch, item::Item)
-    prior = b.agents[item.agent].prior
-    return Rating(posterior(b,item.agent)/item.likelihood,prior.beta,prior.gamma)
+    r = b.agents[item.agent].rating
+    return Rating(posterior(b,item.agent)/item.likelihood,r.beta,r.gamma)
 end
 function within_priors(b::Batch, event::Int64)#event=1
     return [ [within_prior(b,item) for item in team.items ] for team in b.events[event].teams ]
@@ -511,7 +519,7 @@ function forward_prior_out(b::Batch, agent::String)
 end
 function backward_prior_out(b::Batch, agent::String)
     N = b.skills[agent].likelihood*b.skills[agent].backward
-    return forget(N, b.agents[agent].prior.gamma, b.skills[agent].elapsed) 
+    return forget(N, b.agents[agent].rating.gamma, b.skills[agent].elapsed) 
 end
 function new_backward_info(b::Batch)
     for a in keys(b.skills)
@@ -692,8 +700,6 @@ end
 # ta = [Rating(0.0,1.0),Rating(0.0,1.0),Rating(0.0,1.0)]
 # tb = [Rating(0.0,1.0),Rating(0.0,1.0),Rating(0.0,1.0)]
 # posteriors(Game([ta,tb],[1,0]))
-
-
 
 
 end # module
