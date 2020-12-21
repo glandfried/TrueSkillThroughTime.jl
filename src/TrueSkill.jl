@@ -372,6 +372,7 @@ mutable struct Skill
     backward::Gaussian
     likelihood::Gaussian
     elapsed::Int64
+    online::Gaussian
     function Skill(forward::Gaussian=Ninf, backward::Gaussian=Ninf, likelihood::Gaussian=Ninf, elapsed::Int64=0)
         return new(forward, backward, likelihood, elapsed)
     end
@@ -539,13 +540,13 @@ mutable struct History
     agents::Dict{String,Agent}
     env::Environment
     time::Bool
-    function History(events::Vector{Vector{Vector{String}}},results::Vector{Vector{Int64}},times::Vector{Int64}=Int64[],priors::Dict{String,Rating}=Dict{String,Rating}(), env::Environment=Environment())
+    function History(events::Vector{Vector{Vector{String}}},results::Vector{Vector{Int64}},times::Vector{Int64}=Int64[],priors::Dict{String,Rating}=Dict{String,Rating}(), env::Environment=Environment(), online::Bool=false)
         (length(events) != length(results)) && throw(error("length(events) != length(results)"))
         (length(times) > 0) & (length(events) != length(times)) && throw(error("length(times) > 0) & (length(events) != length(times))"))
         
         agents = Dict([ (a, Agent(haskey(priors, a) ? priors[a] : Rating(env.mu, env.sigma, env.beta, env.gamma), Ninf, minInt64)) for a in Set(vcat((events...)...)) ])
         h = new(length(events), Vector{Batch}(), agents, env, length(times)>0)
-        trueskill(h, events, results, times)
+        trueskill(h, events, results, times, online)
         return h
     end
     function History(;events::Vector{Vector{Vector{String}}},results::Vector{Vector{Int64}},times::Vector{Int64}=Int64[],priors::Dict{String,Rating}=Dict{String,Rating}(), env::Environment=Environment())
@@ -557,7 +558,7 @@ Base.length(h::History) = h.size
 Base.show(io::IO, h::History) = print("History(Events=", h.size
                                      ,", Batches=", length(h.batches)
                                     ,", Agents=", length(h.agents), ")")
-function trueskill(h::History, composition::Vector{Vector{Vector{String}}},results::Vector{Vector{Int64}}, times::Vector{Int64})
+function trueskill(h::History, composition::Vector{Vector{Vector{String}}},results::Vector{Vector{Int64}}, times::Vector{Int64}, online::Bool)
     o = length(times)>0 ? sortperm(times) : [i for i in 1:length(composition)]
     i = 1::Int64
     while i <= length(h)
@@ -568,6 +569,12 @@ function trueskill(h::History, composition::Vector{Vector{Vector{String}}},resul
         for a in keys(b.skills)
             h.agents[a].last_time = length(times) == 0 ? maxInt64 : t
             h.agents[a].message = forward_prior_out(b,a)
+        end
+        if online 
+            convergence(h,true)
+            for a in keys(b.skills)
+                b.skills[a].online = forward_prior_out(b,a)
+            end
         end
         i = j + 1
     end

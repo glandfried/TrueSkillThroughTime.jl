@@ -372,14 +372,14 @@ using Test
         env = ttt.Environment(mu=0.0,sigma=6.0, beta=1.0, gamma=0.05, iter=100)
         
         h = ttt.History(events=composition, results=results, times = [0, 10, 20], env=env)
-        @test Base.summarysize(h) < 3600
-        @test Base.summarysize(h.batches) - Base.summarysize(h.agents) < 2800
+        @test Base.summarysize(h) < 3670
+        @test Base.summarysize(h.batches) - Base.summarysize(h.agents) < 2900
         @test Base.summarysize(h.agents) < 700
-        @test Base.summarysize(h.batches[2]) - Base.summarysize(h.agents)  < 910
+        @test Base.summarysize(h.batches[2]) - Base.summarysize(h.agents)  < 940
         
         @test Base.summarysize(h) < Base.summarysize(composition)  * 6.5
         
-        @test Base.summarysize(h.batches[1].skills) == 586
+        @test Base.summarysize(h.batches[1].skills) == 618
         @test Base.summarysize(h.batches[1].events) == 314
     end
     @testset "Learning curves" begin
