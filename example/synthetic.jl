@@ -358,4 +358,18 @@ end
         @test abs(1-ttt.cdf(ttt.Gaussian(1.0,sqrt(2)),0.0)-p) < 0.04
     end
 end
+@testset "Online predictions" begin
+    priors = Dict{String,ttt.Rating}()
+    priors["a"] = ttt.Rating(0.0, 3.0, 1.0, 0.0) 
+    priors["b"] = ttt.Rating(0.0, 3.0, 1.0, 0.0) 
+    priors["c"] = ttt.Rating(2.0, 0.5, 1.0, 0.0) 
+#     
+    composition = [[["a"],["b"]], [["a"],["c"]], [["a"],["b"]]]
+    results = [ [1,0], [0,1], [0,1]]
+    times = [1,2,3]
+    h = ttt.History(composition , results, times, priors, ttt.Environment(iter=100, gamma=0.0),true)
+    
+    h.batches[3].skills["b"].forward
+    h.batches[3].skills["b"].online
+end
 end

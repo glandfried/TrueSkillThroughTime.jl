@@ -566,15 +566,15 @@ function trueskill(h::History, composition::Vector{Vector{Vector{String}}},resul
         while ((length(times)>0) & (j < length(h)) && (times[o[j+1]] == t)) j += 1 end
         b = Batch(composition[o[i:j]],results[o[i:j]], t, h.agents, h.env)        
         push!(h.batches,b)
+        if online 
+            for a in keys(b.skills)
+                b.skills[a].online = b.skills[a].forward
+            end
+            convergence(h,true)
+        end
         for a in keys(b.skills)
             h.agents[a].last_time = length(times) == 0 ? maxInt64 : t
             h.agents[a].message = forward_prior_out(b,a)
-        end
-        if online 
-            convergence(h,true)
-            for a in keys(b.skills)
-                b.skills[a].online = forward_prior_out(b,a)
-            end
         end
         i = j + 1
     end
@@ -702,11 +702,5 @@ function add_events(h::History,composition::Vector{Vector{Vector{String}}},resul
     h.size = h.size + n
     iteration(h)
 end
-
-# 
-# ta = [Rating(0.0,1.0),Rating(0.0,1.0),Rating(0.0,1.0)]
-# tb = [Rating(0.0,1.0),Rating(0.0,1.0),Rating(0.0,1.0)]
-# posteriors(Game([ta,tb],[1,0]))
-
 
 end # module
