@@ -561,16 +561,22 @@ Base.show(io::IO, h::History) = print("History(Events=", h.size
 function trueskill(h::History, composition::Vector{Vector{Vector{String}}},results::Vector{Vector{Int64}}, times::Vector{Int64}, online::Bool)
     o = length(times)>0 ? sortperm(times) : [i for i in 1:length(composition)]
     i = 1::Int64
+    last = 0.0
     while i <= length(h)
         j, t = i, length(times) == 0 ? i : times[o[i]]
         while ((length(times)>0) & (j < length(h)) && (times[o[j+1]] == t)) j += 1 end
         b = Batch(composition[o[i:j]],results[o[i:j]], t, h.agents, h.env)        
         push!(h.batches,b)
-        if online 
+        if online
+            new = round(100*(i/length(h)))
+            if new != last
+                print("\r",new,"%")
+                last = new
+            end
             for a in keys(b.skills)
                 b.skills[a].online = b.skills[a].forward
             end
-            convergence(h,true)
+            convergence(h)
         end
         for a in keys(b.skills)
             h.agents[a].last_time = length(times) == 0 ? maxInt64 : t
@@ -578,6 +584,7 @@ function trueskill(h::History, composition::Vector{Vector{Vector{String}}},resul
         end
         i = j + 1
     end
+    println("\r100.0%")
 end
 function diff(old::Dict{String,Gaussian}, new::Dict{String,Gaussian})
     step = (0., 0.)
