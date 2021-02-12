@@ -10,18 +10,18 @@ using DataFrames
 @testset "Test OGS" begin
     println("Opening dataset")
     data = CSV.read("input/summary_filtered.csv")    
-    prior_dict = Dict{String,ttt.Rating}()
+    prior_dict = Dict{String,ttt.Player}()
     for h_key in Set([(row.handicap, row.width) for row in eachrow(data) ])
-        prior_dict[string(h_key)] = ttt.Rating(0.,25.0/3.,0.,1.0/100)
+        prior_dict[string(h_key)] = ttt.Player(ttt.Gaussian(0.,25.0/3.),0.,1.0/100)
     end
     prior_copy = copy(prior_dict)
-    results = [row.black_win == 1 ? [1,0] : [0, 1] for row in eachrow(data) ]
+    results = [row.black_win == 1 ? [0.,1.] : [1., 0.] for row in eachrow(data) ]
     events = [ r.handicap<2 ? [[string(r.white)],[string(r.black)]] : [[string(r.white)],[string(r.black),string((r.handicap,r.width))]] for r in eachrow(data) ]   
     times = Vector{Int64}()
     
     println(now())
     println("Creating History")
-    h = ttt.History(events, results, times , prior_dict, ttt.Environment(mu=0.0,sigma=10.,beta=1.,gamma=0.2125,iter=16))
+    h = ttt.History(events, results, times , prior_dict, mu=0.0,sigma=10.,beta=1.,gamma=0.2125,iter=16)
     ts_log_evidence = ttt.log_evidence(h)
     println(now())
     println("Converging History")

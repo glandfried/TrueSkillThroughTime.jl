@@ -9,10 +9,10 @@ using DataFrames
 
 @testset "same_strength" begin
     events = [ [["aj"],["bj"]],[["bj"],["cj"]], [["cj"],["aj"]] ,[["aj"],["bj"]],[["bj"],["cj"]], [["cj"],["aj"]]]
-    results = [[0,1],[0,1],[0,1],[0,1],[0,1],[0,1]]    
-    priors = Dict{String,ttt.Rating}()
+    results = [[1.,0.],[1.,0.],[1.,0.],[1.,0.],[1.,0.],[1.,0.]]    
+    priors = Dict{String,ttt.Player}()
     for k in ["aj", "bj", "cj"]
-        priors[k] = ttt.Rating(0., 3., 0.5, 0.0) 
+        priors[k] = ttt.Player(ttt.Gaussian(0., 3.), 0.5, 0.0) 
     end
     h = ttt.History(events, results, [1,2,3,4,5,6], priors)
     lc_ts = ttt.learning_curves(h)
@@ -47,27 +47,22 @@ end
     predicciones_bici = Float64[] 
     predicciones_ajbj = Float64[] 
     predicciones_bjcj = Float64[] 
-    events = [ [["aj"],["bj"]], [["bj"],["cj"]], [["cj"],["aj"]],[["aj"],["bj"]], [["bj"],["cj"]], [["cj"],["aj"]],
+    composition = [ [["aj"],["bj"]], [["bj"],["cj"]], [["cj"],["aj"]],[["aj"],["bj"]], [["bj"],["cj"]], [["cj"],["aj"]],
                 [["ai"],["bi"]], [["bi"],["ci"]], [["ci"],["ai"]], [["ai"],["bi"]], [["bi"],["ci"]], [["ci"],["ai"]],
-                [["ai"],["aj"]] ]
-    results = [[0,1],[0,1],[0,1],[0,1],[0,1],[0,1], [0,1],[0,1],[0,1],[0,1],[0,1],[0,1], [1,0]]    
-    batches = [1,1,1,1,1,1,1,1,1,1,1,1,1]
+                [["aj"],["ai"]] ]
+    times = [1,1,1,1,1,1,1,1,1,1,1,1,1]
     Nbeta = ttt.Gaussian(0.0,0.5)
         
     for i in 1:150
-        push!(events, [["ai"],["aj"]])
-        push!(results, [0,1])
-        push!(batches, 1)
-        priors = Dict{String,ttt.Rating}()
+        push!(composition, [["ai"],["aj"]])
+        push!(times, 1)
+        priors = Dict{String,ttt.Player}()
         for k in ["aj", "bj", "cj", "ai", "bi", "ci"]
-            priors[k] = ttt.Rating(0., 5.0, 0.5, 0.0) 
+            priors[k] = ttt.Player(ttt.Gaussian(0., 5.0), 0.5, 0.0) 
         end
         
-        h = ttt.History(events, results, batches, priors, ttt.Environment(iter=40))
+        h = ttt.History(composition=composition, times=times, priors=priors, iter=40)
         ttt.convergence(h)
-        #ttt.convergence(h)
-        #ttt.convergence(h)
-        #ttt.convergence(h)
         
         lc = ttt.learning_curves(h)
         
@@ -99,12 +94,12 @@ end
 end
 @testset "smoothing" begin
     events = [ [["a"],["b"]], [["a"],["b"]]]
-    results = [[0,1],[1,0]]
+    results = [[1.,0.],[0.,1.]]
     times = [1,2]
-    priors = Dict{String,ttt.Rating}()
+    priors = Dict{String,ttt.Player}()
     Nbeta = ttt.Gaussian(0.,0.5)
     for k in ["a", "b"]
-        priors[k] = ttt.Rating(0., 3., 0.5, 0.0 ) 
+        priors[k] = ttt.Player(ttt.Gaussian(0., 3.), 0.5, 0.0 ) 
     end
     h = ttt.History(events, results, times, priors)
     fp_a_1 = Vector{ttt.Gaussian}()
@@ -134,16 +129,16 @@ end
     d_div_1 = Vector{ttt.Gaussian}()
     d_div_2 = Vector{ttt.Gaussian}()
     
-    push!(fp_a_1, h.batches[1].skills["a"].forward.N)
+    push!(fp_a_1, h.batches[1].skills["a"].forward)
     push!(bp_a_1, h.batches[1].skills["a"].backward)
     push!(lh_a_1, h.batches[1].skills["a"].likelihood)
     push!(wp_a_1, fp_a_1[end]*bp_a_1[end])
-    push!(wp_b_1, h.batches[1].skills["b"].forward.N*h.batches[1].skills["b"].backward)
-    push!(fp_a_2, h.batches[2].skills["a"].forward.N)
+    push!(wp_b_1, h.batches[1].skills["b"].forward*h.batches[1].skills["b"].backward)
+    push!(fp_a_2, h.batches[2].skills["a"].forward)
     push!(bp_a_2, h.batches[2].skills["a"].backward)
     push!(lh_a_2, h.batches[2].skills["a"].likelihood)
     push!(wp_a_2, fp_a_2[end]*bp_a_2[end])
-    push!(wp_b_2, h.batches[2].skills["b"].forward.N*h.batches[2].skills["b"].backward)
+    push!(wp_b_2, h.batches[2].skills["b"].forward*h.batches[2].skills["b"].backward)
     push!(e_1, h.batches[1].events[1].evidence)
     push!(e_2, h.batches[2].events[1].evidence)
     push!(lh_b_1, h.batches[1].skills["b"].likelihood)
@@ -156,31 +151,31 @@ end
     
     
     d_1 = wp_a_1[end]+Nbeta - wp_b_1[end]+Nbeta 
-    push!(d_div_1 , ttt.trunc(d_1,0.,false)/d_1)
+    push!(d_div_1 , ttt.approx(d_1,0.,false)/d_1)
     d_2 = wp_a_1[end]+Nbeta - wp_b_1[end]+Nbeta 
-    push!(d_div_2 , ttt.trunc(d_2,0.,false)/d_2)
+    push!(d_div_2 , ttt.approx(d_2,0.,false)/d_2)
     
     for _ in 1:10
         ttt.iteration(h)
-        push!(fp_a_1, h.batches[1].skills["a"].forward.N)
+        push!(fp_a_1, h.batches[1].skills["a"].forward)
         push!(bp_a_1, h.batches[1].skills["a"].backward)
         push!(lh_a_1, h.batches[1].skills["a"].likelihood)
         push!(wp_a_1, fp_a_1[end]*bp_a_1[end])
-        push!(wp_b_1, h.batches[1].skills["b"].forward.N*h.batches[1].skills["b"].backward)
-        push!(fp_a_2, h.batches[2].skills["a"].forward.N)
+        push!(wp_b_1, h.batches[1].skills["b"].forward*h.batches[1].skills["b"].backward)
+        push!(fp_a_2, h.batches[2].skills["a"].forward)
         push!(bp_a_2, h.batches[2].skills["a"].backward)
         push!(lh_a_2, h.batches[2].skills["a"].likelihood)
         push!(wp_a_2, fp_a_2[end]*bp_a_2[end])
-        push!(wp_b_2, h.batches[2].skills["b"].forward.N*h.batches[2].skills["b"].backward)
+        push!(wp_b_2, h.batches[2].skills["b"].forward*h.batches[2].skills["b"].backward)
         push!(e_1, h.batches[1].events[1].evidence)
         push!(e_2, h.batches[2].events[1].evidence)
         push!(lh_b_1, h.batches[1].skills["b"].likelihood)
         push!(lh_b_2, h.batches[2].skills["b"].likelihood)
         
         d_1 = wp_a_1[end]+Nbeta - wp_b_1[end]+Nbeta 
-        push!(d_div_1 , ttt.trunc(d_1,0.,false)/d_1)
+        push!(d_div_1 , ttt.approx(d_1,0.,false)/d_1)
         d_2 = wp_a_1[end]+Nbeta - wp_b_1[end]+Nbeta 
-        push!(d_div_2 , ttt.trunc(d_2,0.,false)/d_2)
+        push!(d_div_2 , ttt.approx(d_2,0.,false)/d_2)
         push!(p_a_1, wp_a_1[end]*lh_a_1[end])
         push!(p_a_2, wp_a_2[end]*lh_a_2[end])
         push!(p_b_1, wp_b_1[end]*lh_b_1[end])
@@ -232,7 +227,7 @@ end
 @testset "ttt_vs_ts" begin
     
     events = Array{Array{Array{String,1},1},1}()
-    results =  Array{Array{Int64,1},1}()
+    results =  Array{Array{Float64,1},1}()
     times = Int64[]
     ts_log_evidence = Float64[]
     ttt_log_evidence = Float64[]
@@ -241,11 +236,11 @@ end
     ttt_last = Float64[]; ttt_midle = Float64[]; ttt_second = Float64[]
     for i in 0:127
         push!(events ,  [["a"],["b"]], [["a"],["b"]])
-        push!(results ,  [0,1],[1,0] )
+        push!(results ,  [1.,0.],[0.,1.] )
         push!(times,  i*2+1, i*2+2 )
-        priors = Dict{String,ttt.Rating}()
+        priors = Dict{String,ttt.Player}()
         for k in ["a", "b"]
-            priors[k] = ttt.Rating(0., 3.0, 0.5, 0.0) 
+            priors[k] = ttt.Player(ttt.Gaussian(0., 3.0), 0.5, 0.0) 
         end
         h = ttt.History(events, results, times, priors)
         push!(ts_log_evidence , ttt.log_evidence(h))
@@ -283,7 +278,7 @@ end
     perf_target = [(Random.randn(1)[1]*beta + mean_target[i]) for i in 1:1000] 
     perf_agent = [(Random.randn(1)[1]*beta + mean_target[i]) for i in 1:1000] 
     events = [ [["a"], [string(i)] ] for i in 1:1000]
-    results = [ perf_agent[i] > perf_target[i] ? [0,1] : [1,0] for i in 1:1000 ]
+    results = [ perf_agent[i] > perf_target[i] ? [1.,0.] : [0.,1.] for i in 1:1000 ]
     batches= [i for i in 1:1000 ]
     
     selected_gammas = [0.005,0.01,0.015,0.02,0.025]
@@ -294,10 +289,10 @@ end
     learning_curves = Vector{Vector{Float64}}()
     for gamma in gammas#gamma=0.015
         
-        priors = Dict{String,ttt.Rating}()
-        priors["a"] = ttt.Rating(0., 3.0, beta, gamma) 
+        priors = Dict{String,ttt.Player}()
+        priors["a"] = ttt.Player(ttt.Gaussian(0., 3.0), beta, gamma) 
         for k in 1:1000
-            priors[string(k)] = ttt.Rating(mean_target[k], 0.5, beta, 0.0) 
+            priors[string(k)] = ttt.Player(ttt.Gaussian(mean_target[k], 0.5), beta, 0.0) 
         end
         h = ttt.History(events, results, batches, priors)
         push!(evidencias_ts, ttt.log_evidence(h))
@@ -342,15 +337,15 @@ end
     true_skills = [i for i in -5.0:5.0] 
     mu_prior = [ abs(i)==5.0 ? i : 0.0 for i in -5.0:5.0]
     sigma_prior = [ abs(i)==5.0 ? 1e-7 : 6.0 for i in -5.0:5.0]
-    priors = Dict{String,ttt.Rating}()
+    priors = Dict{String,ttt.Player}()
     for i in -5:5
-        priors[string(i)] = ttt.Rating(mu_prior[i+6], sigma_prior[i+6], beta, 0.0) 
+        priors[string(i)] = ttt.Player(ttt.Gaussian(mu_prior[i+6], sigma_prior[i+6]), beta, 0.0) 
     end
     
     events = [ [[string(a-1)],[string(a)]]  for e in 1:100 for a in -4:5]
-    results = [ (Random.randn(1)[1]*beta + a-1) > (Random.randn(1)[1]*beta + a) ? [1,0] : [0,1] for i in 1:100 for a in -4.0:5.0] 
+    results = [ (Random.randn(1)[1]*beta + a-1) > (Random.randn(1)[1]*beta + a) ? [0.,1.] : [1.,0.] for i in 1:100 for a in -4.0:5.0] 
     times = [ e  for e in 1:100 for a in -4:5]
-    h = ttt.History(events , results, times, priors, ttt.Environment(iter=100))
+    h = ttt.History(events , results, times, priors, iter=100)
     ttt.convergence(h)
     diffs = [(ttt.posterior(h.batches[1],string(a))-ttt.posterior(h.batches[1],string(a-1))).mu for a in -3:4]
     probs = [ 1-ttt.cdf(ttt.Gaussian(d,sqrt(2)),0.0)  for d in diffs]
@@ -359,15 +354,15 @@ end
     end
 end
 @testset "Online predictions" begin
-    priors = Dict{String,ttt.Rating}()
-    priors["a"] = ttt.Rating(0.0, 3.0, 1.0, 0.0) 
-    priors["b"] = ttt.Rating(0.0, 3.0, 1.0, 0.0) 
-    priors["c"] = ttt.Rating(2.0, 0.5, 1.0, 0.0) 
+    priors = Dict{String,ttt.Player}()
+    priors["a"] = ttt.Player(ttt.Gaussian(0.0, 3.0), 1.0, 0.0) 
+    priors["b"] = ttt.Player(ttt.Gaussian(0.0, 3.0), 1.0, 0.0) 
+    priors["c"] = ttt.Player(ttt.Gaussian(2.0, 0.5), 1.0, 0.0) 
 #     
     composition = [[["a"],["b"]], [["a"],["c"]], [["a"],["b"]]]
-    results = [ [1,0], [0,1], [0,1]]
+    results = [ [0.,1.], [1.,0.], [1.,0.]]
     times = [1,2,3]
-    h = ttt.History(composition , results, times, priors, ttt.Environment(iter=100, gamma=0.0),true)
+    h = ttt.History(composition , results, times, priors, iter=100, gamma=0.0,online=true)
     
     h.batches[3].skills["b"].forward
     h.batches[3].skills["b"].online
