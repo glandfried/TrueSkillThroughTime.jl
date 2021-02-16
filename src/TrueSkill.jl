@@ -104,7 +104,7 @@ global const N01 = Gaussian(0.0, 1.0)
 global const Ninf = Gaussian(0.0, Inf)
 global const N00 = Gaussian(0.0, 0.0)
 
-Base.show(io::IO, g::Gaussian) = print("Gaussian(mu=", round(g.mu,digits=3)," ,sigma=", round(g.sigma,digits=3), ")")
+Base.show(io::IO, g::Gaussian) = print("Gaussian(mu=", round(g.mu,digits=3), ", sigma=", round(g.sigma,digits=3), ")")
 function _pi_(N::Gaussian)
     if N.sigma > 0.
         return N.sigma^-2
@@ -266,10 +266,18 @@ mutable struct Game
     evidence::Float64
     function Game(teams::Vector{Vector{Player}}, result::Vector{Float64}=Float64[],p_draw::Float64=0.0)
         ((0.0 > p_draw) | (1.0 <= p_draw)) &&  throw(error("0.0 <= Draw probability < 1.0"))
+        (length(result)>0) && (length(teams)!= length(result)) && throw(error("(length(result)>0) & (length(teams)!= length(result))"))
+        (p_draw == 0.0) && (length(result)>0) && (length(unique(result)) != length(result)) && throw(error("(p_draw == 0.0) && (length(result)>0) && (length(unique(result)) != length(result))"))
         
         _g = new(teams,result,p_draw,[],0.0)
         likelihoods(_g)
         return _g
+    end
+    function Game(teams::Vector{Vector{Player}}, result::Vector{Float64}=Float64[];p_draw::Float64=0.0)
+        Game(teams, result, p_draw)
+    end
+    function Game(teams::Vector{Vector{Player}}; result::Vector{Float64}=Float64[],p_draw::Float64=0.0)
+        Game(teams, result, p_draw)
     end
 end        
 Base.length(G::Game) = length(G.teams)
@@ -541,6 +549,11 @@ mutable struct History
     end
 end
 
+# History(composition::Vector{Vector{Vector{String}}}, results::Vector{Vector{Int64}}=Vector{Vector{Int64}}(), times::Vector{Int64}=Int64[], priors::Dict{String,Player}=Dict{String,Player}(); mu::Float64=MU, sigma::Float64=SIGMA, beta::Float64=BETA, gamma::Float64=GAMMA, p_draw::Float64=P_DRAW, epsilon::Float64=EPSILON, iter::Int64=ITER, online::Bool=false) = History(composition, convert(Vector{Vector{Float64}},results), times, priors, mu=mu, sigma=sigma, beta=beta, gamma=gamma, p_draw=p_draw, epsilon=epsilon, iter=iter, online=online)
+#     
+# History(;composition::Vector{Vector{Vector{String}}}, results::Vector{Vector{Int64}}=Vector{Vector{Int64}}(), times::Vector{Int64}=Int64[], priors::Dict{String,Player}=Dict{String,Player}(), mu::Float64=MU, sigma::Float64=SIGMA, beta::Float64=BETA, gamma::Float64=GAMMA, p_draw::Float64=P_DRAW, epsilon::Float64=EPSILON, iter::Int64=ITER, online::Bool=false) = History(composition, convert(Vector{Vector{Float64}},results), times, priors, mu=mu, sigma=sigma, beta=beta, gamma=gamma, p_draw=p_draw, epsilon=epsilon, iter=iter, online=online)
+
+    
 Base.length(h::History) = h.size
 Base.show(io::IO, h::History) = print("History(Events=", h.size
                                      ,", Batches=", length(h.batches)
