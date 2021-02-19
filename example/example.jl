@@ -44,3 +44,13 @@ h = ttt.History(composition)
 lc = ttt.learning_curves(h)
 print(lc["a"])
 print(lc["b"])
+
+# Code 8
+ttt.convergence(h)
+lc = ttt.learning_curves(h)
+print(lc["a"])
+print(lc["b"])
+
+
+
+

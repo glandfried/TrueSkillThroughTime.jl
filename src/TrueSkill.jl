@@ -3,7 +3,7 @@ module TrueSkill
 global const BETA = 1.0::Float64
 global const MU = 0.0::Float64
 global const SIGMA = (BETA * 6)::Float64
-global const GAMMA = (BETA * 0.05)::Float64
+global const GAMMA = (BETA * 0.03)::Float64
 global const P_DRAW = 0.0::Float64
 global const EPSILON = 1e-6::Float64
 global const ITER = 30::Int64
