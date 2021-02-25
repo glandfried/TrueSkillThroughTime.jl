@@ -6,7 +6,7 @@ global const SIGMA = (BETA * 6)::Float64
 global const GAMMA = (BETA * 0.03)::Float64
 global const P_DRAW = 0.0::Float64
 global const EPSILON = 1e-6::Float64
-global const ITER = 30::Int64
+global const ITERATIONS = 30::Int64
 global const sqrt2 = sqrt(2)
 global const sqrt2pi = sqrt(2*pi)
 global const PI = 1/(SIGMA^2)
@@ -532,27 +532,24 @@ mutable struct History
     beta::Float64
     gamma::Float64
     p_draw::Float64
-    epsilon::Float64
-    iter::Int64
     online::Bool
-    function History(composition::Vector{Vector{Vector{String}}}, results::Vector{Vector{Float64}}=Vector{Vector{Float64}}(), times::Vector{Int64}=Int64[], priors::Dict{String,Player}=Dict{String,Player}(); mu::Float64=MU, sigma::Float64=SIGMA, beta::Float64=BETA, gamma::Float64=GAMMA, p_draw::Float64=P_DRAW, epsilon::Float64=EPSILON, iter::Int64=ITER, online::Bool=false)
+    function History(composition::Vector{Vector{Vector{String}}}, results::Vector{Vector{Float64}}=Vector{Vector{Float64}}(), times::Vector{Int64}=Int64[], priors::Dict{String,Player}=Dict{String,Player}(); mu::Float64=MU, sigma::Float64=SIGMA, beta::Float64=BETA, gamma::Float64=GAMMA, p_draw::Float64=P_DRAW, online::Bool=false)
         (length(results) > 0) & (length(composition) != length(results)) && throw(error("(length(times) > 0) & (length(composition) != length(results))"))
         (length(times) > 0) & (length(composition) != length(times)) && throw(error("length(times) > 0) & (length(composition) != length(times))"))
         
         agents = Dict([ (a, Agent(haskey(priors, a) ? priors[a] : Player(Gaussian(mu, sigma), beta, gamma), Ninf, minInt64)) for a in Set(vcat((composition...)...)) ])
-        h = new(length(composition), Vector{Batch}(), agents, length(times)>0, mu, sigma, beta, gamma, p_draw, epsilon, iter, online)
+        h = new(length(composition), Vector{Batch}(), agents, length(times)>0, mu, sigma, beta, gamma, p_draw, online)
         trueskill(h, composition, results, times, online)
         return h
     end
-    function History(;composition::Vector{Vector{Vector{String}}},results::Vector{Vector{Float64}}=Vector{Vector{Float64}}(),times::Vector{Int64}=Int64[],priors::Dict{String,Player}=Dict{String,Player}(), mu::Float64=MU, sigma::Float64=SIGMA, beta::Float64=BETA, gamma::Float64=GAMMA, p_draw::Float64=P_DRAW, epsilon::Float64=EPSILON, iter::Int64=ITER, online::Bool=false)
-        History(composition, results, times, priors, mu=mu, sigma=sigma, beta=beta, gamma=gamma, p_draw=p_draw, epsilon=epsilon, iter=iter, online=online)
+    function History(;composition::Vector{Vector{Vector{String}}},results::Vector{Vector{Float64}}=Vector{Vector{Float64}}(),times::Vector{Int64}=Int64[],priors::Dict{String,Player}=Dict{String,Player}(), mu::Float64=MU, sigma::Float64=SIGMA, beta::Float64=BETA, gamma::Float64=GAMMA, p_draw::Float64=P_DRAW, online::Bool=false)
+        History(composition, results, times, priors, mu=mu, sigma=sigma, beta=beta, gamma=gamma, p_draw=p_draw, online=online)
     end
 end
 
-# History(composition::Vector{Vector{Vector{String}}}, results::Vector{Vector{Int64}}=Vector{Vector{Int64}}(), times::Vector{Int64}=Int64[], priors::Dict{String,Player}=Dict{String,Player}(); mu::Float64=MU, sigma::Float64=SIGMA, beta::Float64=BETA, gamma::Float64=GAMMA, p_draw::Float64=P_DRAW, epsilon::Float64=EPSILON, iter::Int64=ITER, online::Bool=false) = History(composition, convert(Vector{Vector{Float64}},results), times, priors, mu=mu, sigma=sigma, beta=beta, gamma=gamma, p_draw=p_draw, epsilon=epsilon, iter=iter, online=online)
+# History(composition::Vector{Vector{Vector{String}}}, results::Vector{Vector{Int64}}=Vector{Vector{Int64}}(), times::Vector{Int64}=Int64[], priors::Dict{String,Player}=Dict{String,Player}(); mu::Float64=MU, sigma::Float64=SIGMA, beta::Float64=BETA, gamma::Float64=GAMMA, p_draw::Float64=P_DRAW, online::Bool=false) = History(composition, convert(Vector{Vector{Float64}},results), times, priors, mu=mu, sigma=sigma, beta=beta, gamma=gamma, p_draw=p_draw, online=online)
 #     
-# History(;composition::Vector{Vector{Vector{String}}}, results::Vector{Vector{Int64}}=Vector{Vector{Int64}}(), times::Vector{Int64}=Int64[], priors::Dict{String,Player}=Dict{String,Player}(), mu::Float64=MU, sigma::Float64=SIGMA, beta::Float64=BETA, gamma::Float64=GAMMA, p_draw::Float64=P_DRAW, epsilon::Float64=EPSILON, iter::Int64=ITER, online::Bool=false) = History(composition, convert(Vector{Vector{Float64}},results), times, priors, mu=mu, sigma=sigma, beta=beta, gamma=gamma, p_draw=p_draw, epsilon=epsilon, iter=iter, online=online)
-
+# History(;composition::Vector{Vector{Vector{String}}}, results::Vector{Vector{Int64}}=Vector{Vector{Int64}}(), times::Vector{Int64}=Int64[], priors::Dict{String,Player}=Dict{String,Player}(), mu::Float64=MU, sigma::Float64=SIGMA, beta::Float64=BETA, gamma::Float64=GAMMA, p_draw::Float64=P_DRAW, online::Bool=false) = History(composition, convert(Vector{Vector{Float64}},results), times, priors, mu=mu, sigma=sigma, beta=beta, gamma=gamma, p_draw=p_draw, online=online)
     
 Base.length(h::History) = h.size
 Base.show(io::IO, h::History) = print("History(Events=", h.size
@@ -628,10 +625,10 @@ function iteration(h::History)
     
     return step
 end
-function convergence(h::History, verbose = true)
+function convergence(h::History; epsilon::Float64=EPSILON, iterations::Int64=ITERATIONS, verbose = true)
     step = (Inf, Inf)::Tuple{Float64,Float64}
     iter = 1::Int64
-    while (step > h.epsilon) & (iter <= h.iter)
+    while (step > epsilon) & (iter <= iterations)
         verbose && print("Iteration = ", iter)
         step = iteration(h)
         iter += 1

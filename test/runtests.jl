@@ -337,21 +337,21 @@ using Test
         composition = [ [["a"],["b"]], [["a"],["c"]] , [["b"],["c"]] ]
         results = [[1.,0.],[0.,1.],[1.,0.]]
         
-        @time h = ttt.History(composition, results, mu=0.0,sigma=6.0, beta=1.0, gamma=0.05, iter=100)
-        @time step , iter = ttt.convergence(h)
+        @time h = ttt.History(composition, results, mu=0.0,sigma=6.0, beta=1.0, gamma=0.05)
+        @time step , iter = ttt.convergence(h, iterations=100)
         @test isapprox(ttt.posterior(h.batches[1],"a"),ttt.Gaussian( 0.001,2.395),1e-3)
         @test isapprox(ttt.posterior(h.batches[1],"b"),ttt.Gaussian(-0.001,2.396),1e-3)
         @test isapprox(ttt.posterior(h.batches[3],"b"),ttt.Gaussian( 0.001,2.396),1e-3)
         
         composition = [ [["a"],["b"]], [["c"],["a"]] , [["b"],["c"]] ]
-        @time h = ttt.History(composition=composition, mu=0.0,sigma=6.0, beta=1.0, gamma=0.05, iter=100)
-        @time step , iter = ttt.convergence(h)
+        @time h = ttt.History(composition=composition, mu=0.0,sigma=6.0, beta=1.0, gamma=0.05)
+        @time step , iter = ttt.convergence(h, iterations=100)
         @test isapprox(ttt.posterior(h.batches[1],"a"),ttt.Gaussian( 0.001,2.395),1e-3)
         @test isapprox(ttt.posterior(h.batches[1],"b"),ttt.Gaussian(-0.001,2.396),1e-3)
         @test isapprox(ttt.posterior(h.batches[3],"b"),ttt.Gaussian( 0.001,2.396),1e-3)
         
-        @time h = ttt.History(composition, mu=0.0,sigma=6.0, beta=1.0, gamma=0.05, iter=100)
-        @time step , iter = ttt.convergence(h)
+        @time h = ttt.History(composition, mu=0.0,sigma=6.0, beta=1.0, gamma=0.05)
+        @time step , iter = ttt.convergence(h, iterations=100)
         @test isapprox(ttt.posterior(h.batches[1],"a"),ttt.Gaussian( 0.001,2.395),1e-3)
         @test isapprox(ttt.posterior(h.batches[1],"b"),ttt.Gaussian(-0.001,2.396),1e-3)
         @test isapprox(ttt.posterior(h.batches[3],"b"),ttt.Gaussian( 0.001,2.396),1e-3)        
@@ -360,8 +360,8 @@ using Test
         composition = [ [["a"],["b"]], [["a"],["c"]] , [["b"],["c"]] ]
         results = [[1.,0.],[0.,1.],[1.,0.]]
         
-        @time h = ttt.History(composition=composition, results=results, times = [0, 10, 20], mu=0.0,sigma=6.0, beta=1.0, gamma=0.05, iter=100)
-        @time step , iter = ttt.convergence(h)
+        @time h = ttt.History(composition=composition, results=results, times = [0, 10, 20], mu=0.0,sigma=6.0, beta=1.0, gamma=0.05)
+        @time step , iter = ttt.convergence(h, iterations=100)
         @test isapprox(ttt.posterior(h.batches[1],"a"),ttt.Gaussian( 0.005,2.404),1e-3)
         @test isapprox(ttt.posterior(h.batches[1],"b"),ttt.Gaussian(-0.016,2.404),1e-3)
         @test isapprox(ttt.posterior(h.batches[3],"b"),ttt.Gaussian( 0.017,2.406),1e-3)
@@ -400,7 +400,7 @@ using Test
         composition = [ [["a"],["b"]], [["a"],["c"]] , [["b"],["c"]] ]
         results = [[1.,0.],[0.,1.],[1.,0.]]
         
-        h = ttt.History(composition=composition, results=results, times = [0, 10, 20], mu=0.0,sigma=6.0, beta=1.0, gamma=0.05, iter=100)
+        h = ttt.History(composition=composition, results=results, times = [0, 10, 20], mu=0.0,sigma=6.0, beta=1.0, gamma=0.05)
         @test Base.summarysize(h) < 3700
         @test Base.summarysize(h.batches) - Base.summarysize(h.agents) < 2900
         @test Base.summarysize(h.agents) < 700

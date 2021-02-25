@@ -276,7 +276,7 @@ end
     
     mean_target = [(Random.randn(1)[1]*beta + skill(i)) for i in 1:1000] 
     perf_target = [(Random.randn(1)[1]*beta + mean_target[i]) for i in 1:1000] 
-    perf_agent = [(Random.randn(1)[1]*beta + mean_target[i]) for i in 1:1000] 
+    perf_agent = [(Random.randn(1)[1]*beta + mean_agent[i]) for i in 1:1000] 
     events = [ [["a"], [string(i)] ] for i in 1:1000]
     results = [ perf_agent[i] > perf_target[i] ? [1.,0.] : [0.,1.] for i in 1:1000 ]
     batches= [i for i in 1:1000 ]
