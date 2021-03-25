@@ -131,6 +131,9 @@ end
 function ppf(N::Gaussian, p::Float64)
     return N.mu - N.sigma * sqrt2  * erfcinv(2 * p)
 end 
+function approx(;N::Gaussian, margin::Float64, tie::Bool)
+    approx(N, margin, tie)
+end
 function approx(N::Gaussian, margin::Float64, tie::Bool)
     #The range is [alpha, beta]
     if !tie
