@@ -56,39 +56,19 @@ print(lc["b"])
 
 ############
 
-using Plots
-using Random
-Random.seed!(999)
-function skill(experiencia::Int64, alpha::Float64=0.0075, media::Int64 = 500)
-    return 1/(1+exp(alpha*(-experiencia+media))) *2
+using Random; Random.seed!(999); N = 1000
+function skill(experience, middle, maximum, slope)
+    return maximum/(1+exp(slope*(-experience+middle)))
 end
-
-mean_agent = [skill(i) for i in 1:1000] 
-mean_target = Random.randn(1000)*0.5 .+ mean_agent 
-perf_target = Random.randn(1000) .+ mean_target
-perf_agent = Random.randn(1000) .+ mean_agent
+target = skill.(1:N, 500, 2, 0.0075)
+opponents = Random.randn.(1000)*0.5 .+ target
 
 
-composition = [[["a"], [string(i)]] for i in 1:1000]
-results = [ perf_agent[i] > perf_target[i] ? [1.,0.] : [0.,1.] for i in 1:1000 ]
-times = [i for i in 1:1000 ]
+composition = [[["a"], [string(i)]] for i in 1:N]
+results = [ r ? [1.,0.] : [0.,1.] for r in (Random.randn(N).+target .> Random.randn(N).+opponents) ]
+times = [i for i in 1:N]
 priors = Dict{String,ttt.Player}()
-for k in 1:1000
-    priors[string(k)] = ttt.Player(ttt.Gaussian(mean_target[k], 0.1)) 
-end
-# gammas = [gamma for gamma in 0.001:0.001:0.04]
-# evidencias = []
-# for g in gammas 
-#     h = ttt.History(composition, results, times, priors, gamma=g)
-#     ttt.convergence(h)
-#     push!(evidencias, ttt.log_evidence(h))
-# end
-# 0.017==gammas[argmax(evidencias)]
-h = ttt.History(composition, results, times, priors, sigma=6.0, gamma=0.017)
+for i in 1:N  priors[string(i)] = ttt.Player(ttt.Gaussian(opponents[i], 0.2))  end
+h = ttt.History(composition, results, times, priors, gamma=0.015)
 ttt.convergence(h)
-    
 mu = [tp[2].mu for tp in ttt.learning_curves(h)["a"]]
-sigma = [tp[2].sigma for tp in ttt.learning_curves(h)["a"]]
-
-plot(mu)
-plot!(mean_agent)
