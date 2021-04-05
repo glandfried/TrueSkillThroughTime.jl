@@ -7,8 +7,12 @@ global const ttt = TrueSkill
 data = CSV.read("input/history.csv")
 times = Dates.value.(data[:,"time_start"] .- Date("1900-1-1")) .- data[:,"round_number"]
 composition = [ r.double == "t" ? [[r.w1_id,r.w2_id],[r.l1_id,r.l2_id]] : [[r.w1_id],[r.l1_id]] for r in eachrow(data) ]   
-h = ttt.History(composition=composition, times = times, sigma = 2.0, gamma = 0.02)
-ttt.convergence(h,epsilon=0.01, iterations=10)
+fit function()
+    h = ttt.History(composition=composition, times = times, sigma = 1.6, gamma = 0.036)
+    ttt.convergence(h,epsilon=0.01, iterations=10)
+    return h
+end
+@time h = fit()
 lc = ttt.learning_curves(h)
 
 
