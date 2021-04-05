@@ -3,11 +3,12 @@ using Dates
 include("../src/TrueSkill.jl")
 using .TrueSkill
 global const ttt = TrueSkill
+using DataFrames
 
-data = CSV.read("input/history.csv")
+data = CSV.read("input/history.csv", DataFrame)
 times = Dates.value.(data[:,"time_start"] .- Date("1900-1-1")) .- data[:,"round_number"]
 composition = [ r.double == "t" ? [[r.w1_id,r.w2_id],[r.l1_id,r.l2_id]] : [[r.w1_id],[r.l1_id]] for r in eachrow(data) ]   
-fit function()
+function fit()
     h = ttt.History(composition=composition, times = times, sigma = 1.6, gamma = 0.036)
     ttt.convergence(h,epsilon=0.01, iterations=10)
     return h
