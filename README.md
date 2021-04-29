@@ -1,5 +1,12 @@
 # TrueSkillThroughTime.jl
 
+None of the commonly used skill estimators, such as TrueSkill, Glicko and Item-Response Theory, correctly models the temporal aspect, which prevents having both good initial estimates and comparability between estimates separated in time and space.
+
+TrueSkill Through Time corrects those biases by modeling the entire history of activities using a single Bayesian network.
+The use of an efficient algorithm, that requires only a few linear iterations over the data, allows scaling to millions of observations in few seconds.
+
+A full scientific documentation is discribed at [TrueSkill Through Time: the Julia, Python and R packages](https://github.com/glandfried/TrueSkillThroughTime/releases/download/doc.0.0.0/article-en.pdf) (Versión en español [aquí](https://github.com/glandfried/TrueSkillThroughTime/releases/download/doc.0.0.0/article-es.pdf)).
+
 ![Lifecycle](https://img.shields.io/badge/lifecycle-experimental-orange.svg)<!--
 ![Lifecycle](https://img.shields.io/badge/lifecycle-maturing-blue.svg)
 ![Lifecycle](https://img.shields.io/badge/lifecycle-stable-green.svg)
@@ -9,10 +16,6 @@
 [![Build Status](https://travis-ci.com/glandfried/TrueSkill.jl.svg?branch=master)](https://travis-ci.com/glandfried/TrueSkill.jl)
 [![codecov.io](http://codecov.io/github/glandfried/TrueSkillThroughTime.jl/coverage.svg?branch=master)](http://codecov.io/github/glandfried/TrueSkill.jl?branch=master)
 
-None of the commonly used skill estimators, such as TrueSkill, Glicko and Item-Response Theory, correctly models the temporal aspect, which prevents having both good initial estimates and comparability between estimates separated in time and space.
-
-TrueSkill Through Time corrects those biases by modeling the entire history of activities using a single Bayesian network.
-The use of an efficient algorithm, that requires only a few linear iterations over the data, allows scaling to millions of observations in few seconds.
 
 ### Parameters
 
@@ -106,7 +109,7 @@ print(lc["b"])
 The learning curves of players `"a"` and `"b"` contain one tuple per game played (not including the initial prior): each tuple has the time of the estimate as the first component, and the estimate itself as the second one.
 
 Although in this example no player is stronger than the others, the TrueSkill estimates present strong variations between players.
-TrueSkill Through Time solves this problem by allowing the information to propagate throughout the system.
+TrueSkill Through Time solves this problem by allowing the information to propagate throughout the system by calling the method `convergence()`.
 
 ```
 convergence(h)
@@ -143,6 +146,7 @@ for i in 1:N  priors[string(i)] = Player(Gaussian(opponents[i], 0.2))  end
 
 h = History(composition, results, times, priors, gamma=0.015)
 convergence(h)
+mu = [tp[2].mu for tp in learning_curves(h)["a"]] 
 ```
 In this code we define four variables to instantiate the class `History`: the `composition` contains 1000 games between the target player and different opponents; the `results` are obtained randomly, sampling the performance of the players; the `time` is a list of integer ranging from 0 to 999 representing the time of each game; and `priors` is a dictionary used to customize player attributes (we assign low uncertainty to the opponents' priors pretending that we know their skills beforehand).
 The Figure shows the evolution of the true (solid line) and estimated (dotted line) learning curves of the target player.
@@ -216,31 +220,10 @@ The Nadal's skill difference between clay and grass gorunds is greater than one 
 To assess whether the complexity added by modeling multidimensionality is appropriate in general terms, we can compare the joint priori prediction of the models, calling the method \texttt{log\_evidence()} of the class \texttt{History}.
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+## Estructure
 
 1. **src/TrueSkill.jl**: Main file
 2. **test/runrests.jl**: Unit test
-3. **example/synthetic.jl**: Synthetic examples
-4. **example/longtest.jl**: Real example with 400.000 games.
 
 Inside **test/** and **example/** you will find a makefile. In each folder you can execute the entire procedure by typing `make` in the terminal. 
 
