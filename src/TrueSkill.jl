@@ -473,12 +473,17 @@ function posteriors(b::Batch)
     end
     return res
 end
-function within_prior(b::Batch, item::Item)
+function within_prior(b::Batch, item::Item, online = false)
     r = b.agents[item.agent].player
-    return Player(posterior(b,item.agent)/item.likelihood,r.beta,r.gamma)
+    if online
+        return Player(b.skills[item.agent].forward,r.beta,r.gamma)
+    else
+        wp = posterior(b,item.agent)/item.likelihood
+        return Player(wp,r.beta,r.gamma)
+    end
 end
-function within_priors(b::Batch, event::Int64)#event=1
-    return [ [within_prior(b,item) for item in team.items ] for team in b.events[event].teams ]
+function within_priors(b::Batch, event::Int64; online = false)#event=1
+    return [ [within_prior(b,item,online) for item in team.items ] for team in b.events[event].teams ]
 end
 function iteration(b::Batch, from::Int64 = 1)
     for e in from:length(b)#e=1
@@ -493,6 +498,22 @@ function iteration(b::Batch, from::Int64 = 1)
         end
         
         b.events[e].evidence = g.evidence
+    end
+end
+function log_evidence2(b::Batch; online::Bool = false, agents::Vector{String} = Vector{String}())
+    if isempty(agents)
+        if online 
+            return sum([log(Game(within_priors(b, e, online=true), outputs(b.events[e]), b.p_draw).evidence) for e in 1:length(b)])
+        else
+            return sum([log(event.evidence) for event in b.events])
+        end
+    else
+        filter = [!isdisjoint(vcat((comp...)...),agents) for comp in get_composition(b.events)]
+        if online 
+            return sum([log(Game(within_priors(b, e, online=true), outputs(b.events[e]), b.p_draw).evidence) for e in 1:length(b) if filter[e] ])
+        else
+            return sum([log(b.events[e].evidence) for e in 1:length(b.events) if filter[e]])
+        end
     end
 end
 function convergence(b::Batch, epsilon::Float64=1e-6, iterations::Int64 = 20)
@@ -662,8 +683,8 @@ function learning_curves(h::History)
     end
     return res
 end
-function log_evidence(h::History)
-   return sum([log(event.evidence) for b in h.batches for event in b.events])
+function log_evidence(h::History; online::Bool = false, agents::Vector{String} = Vector{String}() )
+    return sum([log_evidence2(b, online=online, agents = agents) for b in h.batches])
 end
 function add_events(h::History,composition::Vector{Vector{Vector{String}}};results::Vector{Vector{Float64}}=Vector{Vector{Float64}}(),times::Vector{Int64}=Int64[],priors::Dict{String,Player}=Dict{String,Player}())
     add_events(h, composition, results, times, priors)

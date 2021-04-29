@@ -15,23 +15,19 @@ players = Set(vcat(([ r.double == "t" ? [[r.w1_id,r.w2_id],[r.l1_id,r.l2_id]] : 
 
 priors = Dict([(p, ttt.Player(ttt.Gaussian(0., 1.6), 1.0, 0.036) ) for p in players])
 
-function fit()
-    h = ttt.History(composition=composition, times = days, sigma = 1.0, gamma = 0.01, beta = 0.0, priors = priors)
+function fit(s,g)
+    h = ttt.History(composition=composition, times = days, sigma = s, gamma = g, beta = 0.0, priors = priors)
     ttt.convergence(h,epsilon=0.01, iterations=10)
     return h
 end
-@time h = fit()
+@time h = fit(1.0,0.01)
 ttt.log_evidence(h)
 lc = ttt.learning_curves(h)
-
-#exp(-265780/ 447028)
-exp(-273383/ 447028)
 
 
 federer = "f324"
 nadal = "n409"
 djokovic = "d643"
-vilas = "v028"
 
 dict = Dict{String,Vector}()
 dict["federer_mu"] = [tp[2].mu for tp in lc["f324"]]
@@ -88,3 +84,10 @@ using DataFrames
 df = DataFrame(Dict(key => [value;repeat([missing],maxlen-length(value))] for (key, value) in dict))
 
 CSV.write("output/atp_ground_learning_curves.csv", df; header=true)
+
+@time h_nadal_optimum = fit(0.35,0.0)
+lc = ttt.learning_curves(h_nadal_optimum )
+lc[nadal*"Clay"][end][2].mu - lc[nadal*"Hard"][end][2].mu
+lc[nadal*"Clay"][end][2].mu - lc[nadal*"Grass"][end][2].mu
+lc[djokovic*"Clay"][end][2].mu - lc[djokovic*"Grass"][end][2].mu
+lc[djokovic*"Clay"][end][2].mu - lc[djokovic*"Hard"][end][2].mu

@@ -371,7 +371,21 @@ using Test
         results = [[1.,0.],[0.,1.],[1.,0.]]
         
         h = ttt.History(composition=composition, results=results, mu=0.0,sigma=6.0, beta=1.0, gamma=0.0)
+        trueskill_log_evidence = ttt.log_evidence(h)
+        trueskill_log_evidence_online =  ttt.log_evidence(h, online=true)
+        @test isapprox(trueskill_log_evidence , trueskill_log_evidence_online ,rtol=1e-5)
+        
+        @test isapprox(ttt.posterior(h.batches[1],"b").mu, -1*ttt.posterior(h.batches[1],"c").mu,rtol=1e-5)
+        
+        evidence_second_event = exp(ttt.log_evidence(h, agents = ["b"]))*2
+        @test isapprox(0.5,evidence_second_event,rtol=1e-5)
+        evidence_third_event = exp(ttt.log_evidence(h, agents = ["a"]))*2
+        @test isapprox(0.669885,evidence_third_event ,rtol=1e-5)
+        
         step , iter = ttt.convergence(h)
+        
+        loocv_hat = exp(ttt.log_evidence(h))
+        p_d_m_hat = exp(ttt.log_evidence(h, online=true))
         
         @test isapprox( ttt.posterior(h.batches[1],"a"), ttt.posterior(h.batches[1],"b"), 1e-3)
         @test isapprox( ttt.posterior(h.batches[1],"c"), ttt.posterior(h.batches[1],"d"), 1e-3)
@@ -523,6 +537,25 @@ using Test
         @test isapprox(ttt.posterior(h.batches[1],"b"),ttt.posterior(h.batches[end],"b"),1e-4)
         @test isapprox(ttt.posterior(h.batches[1],"c"),ttt.posterior(h.batches[end],"c"),1e-4)
         @test isapprox(ttt.posterior(h.batches[1],"c"),ttt.posterior(h.batches[1],"b"),1e-4)
+        
+    end
+    @testset "Add events into History 2" begin
+        composition = [[["a"],["b"]],[["b"],["a"]]]
+        h = ttt.History(composition)
+        p_d_m_2 = exp(ttt.log_evidence(h))*2
+        @test isapprox(p_d_m_2, 0.17650911, rtol=1e-5)
+        @test isapprox(p_d_m_2, exp(ttt.log_evidence(h, online=true))*2, rtol=1e-5)
+        @test isapprox(p_d_m_2, exp(ttt.log_evidence(h, online=true, agents = ["a"]))*2, rtol=1e-5)
+        @test isapprox(p_d_m_2, exp(ttt.log_evidence(h, online=false, agents = ["a"]))*2, rtol=1e-5)
+        
+        ttt.convergence(h,iterations=11)
+        loocv_approx_2 = sqrt(exp(ttt.log_evidence(h)))
+        @test isapprox(loocv_approx_2, 0.001976774, rtol=1e-5)
+        
+        p_d_m_approx_2 = exp(ttt.log_evidence(h, online=true))*2
+        @test loocv_approx_2-p_d_m_approx_2 < 1e-4
+        @test isapprox(loocv_approx_2, exp(ttt.log_evidence(h, online=true, agents= ["b"]))*2, atol=1e-5)
+        
         
     end
 end
