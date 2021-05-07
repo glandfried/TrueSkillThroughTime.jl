@@ -1,5 +1,9 @@
-all: data synthetic longtest
+all: data 
+	julia example.jl
 
+atp: data
+	julia atp.jl
+	
 synthetic: ./output/smoothing.csv
 longtest: ./output/longtest_output.csv
 

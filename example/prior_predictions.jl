@@ -5,7 +5,6 @@ using .TrueSkill
 global const ttt = TrueSkill
 using Test
 
-
 p_d_m = [log(0.5)]
 p_d_m_trueskill = [log(0.5)]
 p_d_m_hat = [log(0.5)]
