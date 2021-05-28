@@ -173,6 +173,12 @@ function Base.:*(N::Gaussian, M::Gaussian)
     mu, sigma = mu_sigma(_tau, _pi)
     return Gaussian(mu, sigma)        
 end
+function Base.:*(N::Float64, M::Gaussian)
+    return Gaussian(N*M.mu, abs(N)*M.sigma)
+end
+function Base.:*(M::Gaussian, N::Float64)
+    return Gaussian(N*M.mu, abs(N)*M.sigma)
+end
 function Base.:/(N::Gaussian, M::Gaussian)
     _pi = _pi_(N) - _pi_(M)
     _tau = _tau_(N) - _tau_(M)
@@ -182,9 +188,9 @@ end
 function Base.isapprox(N::Gaussian, M::Gaussian, atol::Real=0)
     return (abs(N.mu - M.mu) < atol) & (abs(N.sigma - M.sigma) < atol)
 end
-function forget(N::Gaussian, gamma::Float64, t::Int64)
+function forget(N::Gaussian, gamma::Float64, t::Int64=1)
     return Gaussian(N.mu, sqrt(N.sigma^2 + t*gamma^2))
-end 
+end
 function compute_margin(p_draw::Float64, sd::Float64)
     _N = Gaussian(0.0, sd )
     res = abs(ppf(_N, 0.5-p_draw/2))
@@ -204,9 +210,8 @@ struct Player
 end
 Base.show(io::IO, r::Player) = print("Player(Gaussian(mu=", round(r.prior.mu,digits=3),", sigma=", round(r.prior.sigma,digits=3), "), beta=", round(r.beta, digits=3), ", gamma=" , round(r.gamma, digits=3),")")
 function performance(R::Player)
-    return Gaussian(R.prior.mu, sqrt(R.prior.sigma^2 + R.beta^2))
+    return forget(R.prior, R.beta)
 end
-
 mutable struct team_messages
     prior::Gaussian
     likelihood_lose::Gaussian
@@ -264,43 +269,44 @@ end
 mutable struct Game
     teams::Vector{Vector{Player}}
     result::Vector{Float64}
+    weights::Vector{Vector{Float64}}
     p_draw::Float64
     likelihoods::Vector{Vector{Gaussian}}
     evidence::Float64
-    function Game(teams::Vector{Vector{Player}}, result::Vector{Float64}=Float64[],p_draw::Float64=0.0)
+    function Game(teams::Vector{Vector{Player}}, result::Vector{Float64}=Float64[],p_draw::Float64=0.0,weights::Vector{Vector{Float64}}=Vector{Vector{Float64}}())
         ((0.0 > p_draw) | (1.0 <= p_draw)) &&  throw(error("0.0 <= Draw probability < 1.0"))
         (length(result)>0) && (length(teams)!= length(result)) && throw(error("(length(result)>0) & (length(teams)!= length(result))"))
+        (length(weights)>0) && (length(teams)!= length(weights)) && throw(error("(length(weights)>0) & (length(teams)!= length(weights))"))
+        (length(weights)>0) && (any([length(team) != length(weight) for (team, weight) in zip(teams, weights)])) && throw(error("(length(weights)>0) & exists i (length(teams[i]) != length(weights[i])"))
         (p_draw == 0.0) && (length(result)>0) && (length(unique(result)) != length(result)) && throw(error("(p_draw == 0.0) && (length(result)>0) && (length(unique(result)) != length(result))"))
-        
-        _g = new(teams,result,p_draw,[],0.0)
+        if isempty(weights)
+            weights = [[1.0 for p in t] for t in teams]
+        end
+        _g = new(teams,result,weights,p_draw,[],0.0)
         likelihoods(_g)
         return _g
     end
-    function Game(teams::Vector{Vector{Player}}, result::Vector{Float64}=Float64[];p_draw::Float64=0.0)
-        Game(teams, result, p_draw)
+    function Game(teams::Vector{Vector{Player}}, result::Vector{Float64}=Float64[];p_draw::Float64=0.0,weights::Vector{Vector{Float64}}=Vector{Vector{Float64}}())
+        Game(teams, result, p_draw, weights)
     end
-    function Game(teams::Vector{Vector{Player}}; result::Vector{Float64}=Float64[],p_draw::Float64=0.0)
-        Game(teams, result, p_draw)
+    function Game(teams::Vector{Vector{Player}}; result::Vector{Float64}=Float64[],p_draw::Float64=0.0,weights::Vector{Vector{Float64}}=Vector{Vector{Float64}}())
+        Game(teams, result, p_draw, weights)
     end
 end        
 Base.length(G::Game) = length(G.teams)
 function size(G::Game)
     return [length(team) for team in g.teams]
 end
-function performance(team::Vector{Player})
+function performance(team::Vector{Player}, weights::Vector{Float64})
     p = N00
-    for r in team
-        p += performance(r)
+    for (r, w) in zip(team, weights)
+        p += w * performance(r)
     end
     return p
 end
-#TODO: reducir perf(game)
+
 function performance(G::Game,i::Int64)
-    res = N00
-    for r in G.teams[i]
-        res += performance(r)
-    end
-    return res
+    return performance(G.teams[i], G.weights[i])
 end 
 function draw_performance(G::Game,i::Int64)
     res = N00
@@ -350,9 +356,18 @@ function likelihood_teams(g::Game)
     
     return [ likelihood(t[o[e]]) for e in 1:length(t)] 
 end
+function likelihoods(team::Vector{Player}, weights::Vector{Float64}, message::Gaussian)
+    team_perf = performance(team, weights)
+    return [
+        forget(
+            (1/w) * (message - exclude(team_perf, w*performance(p))),
+            p.beta)
+        for (p,w) in zip(team, weights)
+    ]
+end
 function likelihoods(g::Game)
     m_t_ft = likelihood_teams(g)
-    g.likelihoods = [[ m_t_ft[e] - exclude(performance(g,e),g.teams[e][i].prior) for i in 1:length(g.teams[e])] for e in 1:length(g)]
+    g.likelihoods = [likelihoods(t, w, m) for (t,w,m) in zip(g.teams, g.weights, m_t_ft)]
     return g.likelihoods
 end
 function posteriors(g::Game)

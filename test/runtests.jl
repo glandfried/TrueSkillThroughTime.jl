@@ -558,5 +558,59 @@ using Test
         
         
     end
+    @testset "1vs1 with weights" begin
+        ta = [ttt.Player(ttt.Gaussian(25.0,25.0/3),25.0/6,0.0)]
+        wa = [1.0]
+        tb = [ttt.Player(ttt.Gaussian(25.0,25.0/3),25.0/6,0.0)]
+        wb = [2.0]
+        g = ttt.Game([ta,tb], weights=[wa,wb])
+        post = ttt.posteriors(g)
+        @test isapprox(post[1][1], ttt.Gaussian(30.625173, 7.765472), 1e-4)
+        @test isapprox(post[2][1], ttt.Gaussian(13.749653, 5.733840), 1e-4)
+
+        wa = [1.0]
+        wb = [0.7]
+        g = ttt.Game([ta,tb], weights=[wa,wb])
+        post = ttt.posteriors(g)
+        @test isapprox(post[1][1], ttt.Gaussian(27.630080, 7.206676), 1e-4)
+        @test isapprox(post[2][1], ttt.Gaussian(23.158943, 7.801628), 1e-4)
+
+        wa = [1.6]
+        wb = [0.7]
+        g = ttt.Game([ta,tb], weights=[wa,wb])
+        post = ttt.posteriors(g)
+        @test isapprox(post[1][1], ttt.Gaussian(26.142438, 7.573088), 1e-4)
+        @test isapprox(post[2][1], ttt.Gaussian(24.500183, 8.193278), 1e-4)
+    end
+    @testset "NvsN with weights" begin
+        ta = [ttt.Player(ttt.Gaussian(25.0,25.0/3),25.0/6,0.0), ttt.Player(ttt.Gaussian(25.0,25.0/3),25.0/6,0.0)]
+        wa = [0.4, 0.8]
+        tb = [ttt.Player(ttt.Gaussian(25.0,25.0/3),25.0/6,0.0), ttt.Player(ttt.Gaussian(25.0,25.0/3),25.0/6,0.0)]
+        wb = [0.9, 0.6]
+        g = ttt.Game([ta,tb], weights=[wa,wb])
+        post = ttt.posteriors(g)
+        @test isapprox(post[1][1], ttt.Gaussian(27.539023, 8.129639), 1e-4)
+        @test isapprox(post[1][2], ttt.Gaussian(30.078046, 7.485372), 1e-4)
+        @test isapprox(post[2][1], ttt.Gaussian(19.287197, 7.243465), 1e-4)
+        @test isapprox(post[2][2], ttt.Gaussian(21.191465, 7.867608), 1e-4)
+
+        wa = [1.3, 1.5]
+        wb = [0.7, 0.4]
+        g = ttt.Game([ta,tb], weights=[wa,wb])
+        post = ttt.posteriors(g)
+        @test isapprox(post[1][1], ttt.Gaussian(25.190190, 8.220511), 1e-4)
+        @test isapprox(post[1][2], ttt.Gaussian(25.219450, 8.182783), 1e-4)
+        @test isapprox(post[2][1], ttt.Gaussian(24.897589, 8.300779), 1e-4)
+        @test isapprox(post[2][2], ttt.Gaussian(24.941479, 8.322717), 1e-4)
+
+        wa = [1.6, 0.2]
+        wb = [0.7, 2.4]
+        g = ttt.Game([ta,tb], weights=[wa,wb])
+        post = ttt.posteriors(g)
+        @test isapprox(post[1][1], ttt.Gaussian(31.674697, 7.501180), 1e-4)
+        @test isapprox(post[1][2], ttt.Gaussian(25.834337, 8.320970), 1e-4)
+        @test isapprox(post[2][1], ttt.Gaussian(22.079819, 8.180607), 1e-4)
+        @test isapprox(post[2][2], ttt.Gaussian(14.987953, 6.308469), 1e-4)
+    end
 end
 
