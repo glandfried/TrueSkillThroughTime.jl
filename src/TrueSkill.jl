@@ -416,6 +416,10 @@ end
 mutable struct Event
     teams::Vector{Team}
     evidence::Float64
+    weights::Vector{Vector{Float64}}
+    function Event(teams, evidence, weights=Vector{Vector{Float64}}())
+       new(teams, evidence, weights) 
+    end
 end
 function outputs(event::Event)
     return [ team.output for team in event.teams]
@@ -435,15 +439,16 @@ mutable struct Batch
     skills::Dict{String,Skill}
     agents::Dict{String,Agent}
     p_draw::Float64
-    function Batch(composition::Vector{Vector{Vector{String}}}, results::Vector{Vector{Float64}}=Vector{Vector{Float64}}() ,time::Int64=0, agents::Dict{String,Agent}=Dict{String,Agent}(), p_draw::Float64 = 0.0)
+    function Batch(composition::Vector{Vector{Vector{String}}}, results::Vector{Vector{Float64}}=Vector{Vector{Float64}}() ,time::Int64=0, agents::Dict{String,Agent}=Dict{String,Agent}(), p_draw::Float64 = 0.0, weights::Vector{Vector{Vector{Float64}}}=Vector{Vector{Vector{Float64}}}())
         (length(results)>0) & (length(composition)!= length(results)) && throw(error("(length(results)>0) & (length(composition)!= length(results))"))
+        (length(weights)>0) & (length(composition)!= length(weights)) && throw(error("(length(weights)>0) & (length(composition)!= length(weights))"))
         
         this_agents = Set(vcat((composition...)...))
         elapsed = Dict([ (a, compute_elapsed(agents[a].last_time, time) ) for a in this_agents  ])
         skills = Dict([ (a, Skill(receive(agents[a],elapsed[a]) ,Ninf ,Ninf , elapsed[a])) for a in this_agents  ])
         events = [Event([Team([Item(composition[e][t][a], Ninf) for a in 1:length(composition[e][t]) ] 
                               , length(results) > 0 ? results[e][t] : Float64(length(composition[e])-t)  ) for t in 1:length(composition[e]) ]
-                        ,0.0) for e in 1:length(composition) ]
+                        ,0.0, isempty(weights) ? weights : weights[e]) for e in 1:length(composition) ]
         
         b = new(time, events , skills, agents, p_draw)
 
@@ -451,15 +456,15 @@ mutable struct Batch
         return b
     end
     function Batch(;composition::Vector{Vector{Vector{String}}}, results::Vector{Vector{Float64}} 
-                 ,time::Int64=0 , agents::Dict{String,Agent}=Dict{String,Agent}(), p_draw::Float64 = 0.0)
-        Batch(composition, results, time, agents, p_draw)
+                 ,time::Int64=0 , agents::Dict{String,Agent}=Dict{String,Agent}(), p_draw::Float64 = 0.0, weights::Vector{Vector{Vector{Float64}}}=Vector{Vector{Vector{Float64}}}())
+        Batch(composition, results, time, agents, p_draw, weights)
     end
 end
 
 Base.show(io::IO, b::Batch) = print("Batch(time=", b.time, ", events=", b.events, ")")
 Base.length(b::Batch) = length(b.events)
 
-function add_events(b::Batch, composition::Vector{Vector{Vector{String}}}, results::Vector{Vector{Float64}}=Vector{Vector{Float64}}())
+function add_events(b::Batch, composition::Vector{Vector{Vector{String}}}, results::Vector{Vector{Float64}}=Vector{Vector{Float64}}(), weights::Vector{Vector{Vector{Float64}}}=Vector{Vector{Vector{Float64}}}())
     this_agents = Set(vcat((composition...)...))
     for a in this_agents#a="c"
         elapsed = compute_elapsed(b.agents[a].last_time , b.time )  
@@ -473,7 +478,8 @@ function add_events(b::Batch, composition::Vector{Vector{Vector{String}}}, resul
     from = length(b)+1
     for e in 1:length(composition)
         event = Event([Team([Item(composition[e][t][a], Ninf) for a in 1:length(composition[e][t]) ] 
-                              , length(results) > 0 ? results[e][t] : Float64(length(composition[e])-t) ) for t in 1:length(composition[e]) ] , 0.0)
+                              , length(results) > 0 ? results[e][t] : Float64(length(composition[e])-t) ) for t in 1:length(composition[e]) ]
+                      , 0.0, isempty(weights) ? weights : weights[e])
         push!(b.events, event)
     end
     iteration(b, from)
@@ -503,7 +509,7 @@ end
 function iteration(b::Batch, from::Int64 = 1)
     for e in from:length(b)#e=1
         
-        g = Game(within_priors(b, e), outputs(b.events[e]), b.p_draw)
+        g = Game(within_priors(b, e), outputs(b.events[e]), b.p_draw, b.events[e].weights)
         
         for (t, team) in enumerate(b.events[e].teams)#(t,team) = (2, b.events[e].teams[2])
             for (i, item) in enumerate(team.items)#(i, item) = (2, team.items[2])
@@ -518,14 +524,14 @@ end
 function log_evidence2(b::Batch; online::Bool = false, agents::Vector{String} = Vector{String}())
     if isempty(agents)
         if online 
-            return sum([log(Game(within_priors(b, e, online=true), outputs(b.events[e]), b.p_draw).evidence) for e in 1:length(b)])
+            return sum([log(Game(within_priors(b, e, online=true), outputs(b.events[e]), b.p_draw, b.events[e].weights).evidence) for e in 1:length(b)])
         else
             return sum([log(event.evidence) for event in b.events])
         end
     else
         filter = [!isdisjoint(vcat((comp...)...),agents) for comp in get_composition(b.events)]
         if online 
-            return sum([log(Game(within_priors(b, e, online=true), outputs(b.events[e]), b.p_draw).evidence) for e in 1:length(b) if filter[e] ])
+            return sum([log(Game(within_priors(b, e, online=true), outputs(b.events[e]), b.p_draw, b.events[e].weights).evidence) for e in 1:length(b) if filter[e] ])
         else
             return sum([log(b.events[e].evidence) for e in 1:length(b.events) if filter[e]])
         end
@@ -572,17 +578,18 @@ mutable struct History
     gamma::Float64
     p_draw::Float64
     online::Bool
-    function History(composition::Vector{Vector{Vector{String}}}, results::Vector{Vector{Float64}}=Vector{Vector{Float64}}(), times::Vector{Int64}=Int64[], priors::Dict{String,Player}=Dict{String,Player}(); mu::Float64=MU, sigma::Float64=SIGMA, beta::Float64=BETA, gamma::Float64=GAMMA, p_draw::Float64=P_DRAW, online::Bool=false)
+    function History(composition::Vector{Vector{Vector{String}}}, results::Vector{Vector{Float64}}=Vector{Vector{Float64}}(), times::Vector{Int64}=Int64[], priors::Dict{String,Player}=Dict{String,Player}(); mu::Float64=MU, sigma::Float64=SIGMA, beta::Float64=BETA, gamma::Float64=GAMMA, p_draw::Float64=P_DRAW, online::Bool=false, weights::Vector{Vector{Vector{Float64}}}=Vector{Vector{Vector{Float64}}}())
         (length(results) > 0) & (length(composition) != length(results)) && throw(error("(length(times) > 0) & (length(composition) != length(results))"))
+        (length(weights) > 0) & (length(composition) != length(weights)) && throw(error("(length(weights) > 0) & (length(composition) != length(weights))"))
         (length(times) > 0) & (length(composition) != length(times)) && throw(error("length(times) > 0) & (length(composition) != length(times))"))
         
         agents = Dict([ (a, Agent(haskey(priors, a) ? priors[a] : Player(Gaussian(mu, sigma), beta, gamma), Ninf, minInt64)) for a in Set(vcat((composition...)...)) ])
         h = new(length(composition), Vector{Batch}(), agents, length(times)>0, mu, sigma, beta, gamma, p_draw, online)
-        trueskill(h, composition, results, times, online)
+        trueskill(h, composition, results, times, online, weights)
         return h
     end
-    function History(;composition::Vector{Vector{Vector{String}}},results::Vector{Vector{Float64}}=Vector{Vector{Float64}}(),times::Vector{Int64}=Int64[],priors::Dict{String,Player}=Dict{String,Player}(), mu::Float64=MU, sigma::Float64=SIGMA, beta::Float64=BETA, gamma::Float64=GAMMA, p_draw::Float64=P_DRAW, online::Bool=false)
-        History(composition, results, times, priors, mu=mu, sigma=sigma, beta=beta, gamma=gamma, p_draw=p_draw, online=online)
+    function History(;composition::Vector{Vector{Vector{String}}},results::Vector{Vector{Float64}}=Vector{Vector{Float64}}(),times::Vector{Int64}=Int64[],priors::Dict{String,Player}=Dict{String,Player}(), mu::Float64=MU, sigma::Float64=SIGMA, beta::Float64=BETA, gamma::Float64=GAMMA, p_draw::Float64=P_DRAW, online::Bool=false, weights::Vector{Vector{Vector{Float64}}}=Vector{Vector{Vector{Float64}}}())
+        History(composition, results, times, priors, mu=mu, sigma=sigma, beta=beta, gamma=gamma, p_draw=p_draw, online=online, weights=weights)
     end
 end
 
@@ -594,7 +601,7 @@ Base.length(h::History) = h.size
 Base.show(io::IO, h::History) = print("History(Events=", h.size
                                      ,", Batches=", length(h.batches)
                                     ,", Agents=", length(h.agents), ")")
-function trueskill(h::History, composition::Vector{Vector{Vector{String}}},results::Vector{Vector{Float64}}, times::Vector{Int64}, online::Bool)
+function trueskill(h::History, composition::Vector{Vector{Vector{String}}},results::Vector{Vector{Float64}}, times::Vector{Int64}, online::Bool, weights::Vector{Vector{Vector{Float64}}})
     o = length(times)>0 ? sortperm(times) : [i for i in 1:length(composition)]
     i = 1::Int64
     last = 0.0
@@ -602,9 +609,9 @@ function trueskill(h::History, composition::Vector{Vector{Vector{String}}},resul
         j, t = i, length(times) == 0 ? i : times[o[i]]
         while ((length(times)>0) & (j < length(h)) && (times[o[j+1]] == t)) j += 1 end
         if length(results)>0
-            b = Batch(composition[o[i:j]],results[o[i:j]], t, h.agents, h.p_draw)
+            b = Batch(composition[o[i:j]],results[o[i:j]], t, h.agents, h.p_draw, isempty(weights) ? weights : weights[o[i:j]])
         else
-            b = Batch(composition[o[i:j]], results , t, h.agents, h.p_draw)
+            b = Batch(composition[o[i:j]], results , t, h.agents, h.p_draw, isempty(weights) ? weights : weights[o[i:j]])
         end
         push!(h.batches,b)
         if online
@@ -701,14 +708,17 @@ end
 function log_evidence(h::History; online::Bool = false, agents::Vector{String} = Vector{String}() )
     return sum([log_evidence2(b, online=online, agents = agents) for b in h.batches])
 end
-function add_events(h::History,composition::Vector{Vector{Vector{String}}};results::Vector{Vector{Float64}}=Vector{Vector{Float64}}(),times::Vector{Int64}=Int64[],priors::Dict{String,Player}=Dict{String,Player}())
-    add_events(h, composition, results, times, priors)
+
+function add_events(h::History,composition::Vector{Vector{Vector{String}}};results::Vector{Vector{Float64}}=Vector{Vector{Float64}}(),times::Vector{Int64}=Int64[],priors::Dict{String,Player}=Dict{String,Player}(), weights::Vector{Vector{Vector{Float64}}}=Vector{Vector{Vector{Float64}}}())
+    add_events(h, composition, results, times, priors, weights)
 end
-function add_events(h::History,composition::Vector{Vector{Vector{String}}},results::Vector{Vector{Float64}}=Vector{Vector{Float64}}(),times::Vector{Int64}=Int64[],priors::Dict{String,Player}=Dict{String,Player}())
+
+function add_events(h::History,composition::Vector{Vector{Vector{String}}},results::Vector{Vector{Float64}}=Vector{Vector{Float64}}(),times::Vector{Int64}=Int64[],priors::Dict{String,Player}=Dict{String,Player}(), weights::Vector{Vector{Vector{Float64}}}=Vector{Vector{Vector{Float64}}}())
     
     (length(times)>0) & !h.time && throw(error("length(times)>0 but !h.time"))
     (length(times)==0) & h.time && throw(error("length(times)==0 but h.time"))
     (length(results) > 0) & (length(composition) != length(results)) && throw(error("(length(results) > 0) & (length(composition) != length(results))"))
+    (length(weights) > 0) & (length(composition) != length(weights)) && throw(error("(length(weights) > 0) & (length(composition) != length(weights))"))
     (length(times) > 0) & (length(composition) != length(times)) && throw(error("length(times) > 0) & (length(composition) != length(times))"))
         
         
@@ -739,16 +749,16 @@ function add_events(h::History,composition::Vector{Vector{Vector{String}}},resul
         if (h.time && (length(h.batches) >= k) && (h.batches[k].time == t))
             b = h.batches[k]
             if length(results)>0
-                add_events(b, composition[o[i:j]],results[o[i:j]])
+                add_events(b, composition[o[i:j]], results[o[i:j]], isempty(weights) ? weights : weights[o[i:j]])
             else
-                add_events(b, composition[o[i:j]])
+                add_events(b, composition[o[i:j]], results, isempty(weights) ? weights : weights[o[i:j]])
             end
         else
             if !h.time k = k + 1 end
             if length(results)>0
-                b =  Batch(composition[o[i:j]],results[o[i:j]], t, h.agents, h.p_draw)
+                b =  Batch(composition[o[i:j]],results[o[i:j]], t, h.agents, h.p_draw, isempty(weights) ? weights : weights[o[i:j]])
             else
-                b =  Batch(composition[o[i:j]], results , t, h.agents, h.p_draw)
+                b =  Batch(composition[o[i:j]], results , t, h.agents, h.p_draw, isempty(weights) ? weights : weights[o[i:j]])
             end
             insert!(h.batches,  k , b)
             if h.time k = k + 1 end
