@@ -581,7 +581,23 @@ using Test
         post = ttt.posteriors(g)
         @test isapprox(post[1][1], ttt.Gaussian(26.142438, 7.573088), 1e-4)
         @test isapprox(post[2][1], ttt.Gaussian(24.500183, 8.193278), 1e-4)
-    end
+        
+        wa = [1.0]; wb = [0.0]
+        ta = [ttt.Player(ttt.Gaussian(2.0,6.0),1.0,0.0)]
+        tb = [ttt.Player(ttt.Gaussian(2.0,6.0),1.0,0.0)]
+        g = ttt.Game([ta,tb], weights=[wa,wb])
+        post = ttt.posteriors(g)
+        @test isapprox(post[1][1], ttt.Gaussian(5.557176746, 4.0527906913), 1e-4)
+        @test isapprox(post[2][1], ttt.Gaussian(2.0, 6.0), 1e-4)
+        # NOTA: trueskill original tiene probelmas en la aproximación: post[2][1].mu = 1.999644 
+        
+        wa = [1.0]; wb = [-1.0]
+        ta = [ttt.Player(ttt.Gaussian(2.0,6.0),1.0,0.0)]
+        tb = [ttt.Player(ttt.Gaussian(2.0,6.0),1.0,0.0)]
+        g = ttt.Game([ta,tb], weights=[wa,wb])
+        post = ttt.posteriors(g)
+        @test isapprox(post[1][1], post[2][1], 1e-4)
+        end
     @testset "NvsN with weights" begin
         ta = [ttt.Player(ttt.Gaussian(25.0,25.0/3),25.0/6,0.0), ttt.Player(ttt.Gaussian(25.0,25.0/3),25.0/6,0.0)]
         wa = [0.4, 0.8]
@@ -611,6 +627,29 @@ using Test
         @test isapprox(post[1][2], ttt.Gaussian(25.834337, 8.320970), 1e-4)
         @test isapprox(post[2][1], ttt.Gaussian(22.079819, 8.180607), 1e-4)
         @test isapprox(post[2][2], ttt.Gaussian(14.987953, 6.308469), 1e-4)
+    end
+    @testset "1vs1 TTT with weights" begin
+        composition = [[["a"],["b"]], [["b"],["a"]]]
+        weights = [[[5.0],[4.0]],[[5.0],[4.0]]]
+        h = ttt.History(composition, mu=2.0, beta=1.0, sigma=6.0, gamma=0.0, weights=weights)
+        lc = ttt.learning_curves(h)
+        @test isapprox(lc["a"][1][2], ttt.Gaussian(5.53765944, 4.758722), 1e-4)
+        @test isapprox(lc["b"][1][2], ttt.Gaussian(-0.83012755, 5.2395689), 1e-4)
+        @test isapprox(lc["a"][2][2], ttt.Gaussian(1.7922776, 4.099566689), 1e-4)
+        @test isapprox(lc["b"][2][2], ttt.Gaussian(4.8455331752, 3.7476161), 1e-4)
+        
+        ttt.convergence(h)
+        lc = ttt.learning_curves(h)
+        @test isapprox(lc["a"][1][2], ttt.Gaussian(lc["a"][1][2].mu, lc["a"][1][2].sigma), 1e-4)
+        @test isapprox(lc["b"][1][2], ttt.Gaussian(lc["a"][1][2].mu, lc["a"][1][2].sigma), 1e-4)
+        @test isapprox(lc["a"][2][2], ttt.Gaussian(lc["a"][1][2].mu, lc["a"][1][2].sigma), 1e-4)
+        @test isapprox(lc["b"][2][2], ttt.Gaussian(lc["a"][1][2].mu, lc["a"][1][2].sigma), 1e-4)
+        
+        composition = [[["a"],["b"]], [["b"],["a"]]]
+        weights = [[[1.0],[4.0]],[[5.0],[4.0]]]
+        h = ttt.History(composition, mu=2.0, beta=1.0, sigma=6.0, gamma=0.0, weights=weights)
+        lc = ttt.learning_curves(h)
+        
     end
 end
 
