@@ -415,15 +415,15 @@ using Test
         results = [[1.,0.],[0.,1.],[1.,0.]]
         
         h = ttt.History(composition=composition, results=results, times = [0, 10, 20], mu=0.0,sigma=6.0, beta=1.0, gamma=0.05)
-        @test Base.summarysize(h) < 3700
-        @test Base.summarysize(h.batches) - Base.summarysize(h.agents) < 2900
+        @test Base.summarysize(h) < 3850
+        @test Base.summarysize(h.batches) - Base.summarysize(h.agents) < 3100
         @test Base.summarysize(h.agents) < 700
-        @test Base.summarysize(h.batches[2]) - Base.summarysize(h.agents)  < 946
+        @test Base.summarysize(h.batches[2]) - Base.summarysize(h.agents)  < 1000
         
-        @test Base.summarysize(h) < Base.summarysize(composition)  * 6.5
+        @test Base.summarysize(h) < Base.summarysize(composition)  * 7
         
         @test Base.summarysize(h.batches[1].skills) == 618
-        @test Base.summarysize(h.batches[1].events) == 314
+        @test Base.summarysize(h.batches[1].events) == 362
     end
     @testset "Learning curves" begin
         composition = [ [["aj"],["bj"]],[["bj"],["cj"]], [["cj"],["aj"]] ]
