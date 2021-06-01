@@ -171,15 +171,14 @@ function Base.:-(N::Gaussian, M::Gaussian)
     return Gaussian(mu, sigma)
 end
 function Base.:*(N::Gaussian, M::Gaussian)
-    if _pi_(N) == Inf || _pi_(M) == Inf
-        return Gaussian(
-            N.mu/(N.sigma^2/M.sigma^2 + 1) + M.mu/(M.sigma^2/N.sigma^2 + 1),
-            sqrt(1/((1/N.sigma^2) + (1/M.sigma^2)))
-        )
+    if N.sigma == 0.0|| M.sigma == 0.0
+        mu = N.mu/(N.sigma^2/M.sigma^2 + 1) + M.mu/(M.sigma^2/N.sigma^2 + 1)
+        sigma = sqrt(1/((1/N.sigma^2) + (1/M.sigma^2)))
+    else
+        _pi = _pi_(N) + _pi_(M)
+        _tau = _tau_(N) + _tau_(M)
+        mu, sigma = mu_sigma(_tau, _pi)
     end
-    _pi = _pi_(N) + _pi_(M)
-    _tau = _tau_(N) + _tau_(M)
-    mu, sigma = mu_sigma(_tau, _pi)
     return Gaussian(mu, sigma)        
 end
 function Base.:*(N::Float64, M::Gaussian)
@@ -191,15 +190,14 @@ function Base.:*(M::Gaussian, N::Float64)
     return Gaussian(N*M.mu, abs(N)*M.sigma)
 end
 function Base.:/(N::Gaussian, M::Gaussian)
-    if _pi_(N) == Inf || _pi_(M) == Inf
-        return Gaussian(
-            N.mu/(1 - N.sigma^2/M.sigma^2) - M.mu/(M.sigma^2/N.sigma^2 - 1),
-            sqrt(1/((1/N.sigma^2) - (1/M.sigma^2)))
-        )
+    if N.sigma == 0.0|| M.sigma == 0.0
+        mu = N.mu/(1 - N.sigma^2/M.sigma^2) - M.mu/(M.sigma^2/N.sigma^2 - 1)
+        sigma =  sqrt(1/((1/N.sigma^2) - (1/M.sigma^2)))
+    else
+        _pi = _pi_(N) - _pi_(M)
+        _tau = _tau_(N) - _tau_(M)
+        mu, sigma = mu_sigma(_tau, _pi)
     end
-    _pi = _pi_(N) - _pi_(M)
-    _tau = _tau_(N) - _tau_(M)
-    mu, sigma = mu_sigma(_tau, _pi)
     return Gaussian(mu, sigma)        
 end
 function Base.isapprox(N::Gaussian, M::Gaussian, atol::Real=0)
