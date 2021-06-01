@@ -89,6 +89,9 @@ struct Gaussian
     mu::Float64
     sigma::Float64
     function Gaussian(mu::Float64=MU, sigma::Float64=SIGMA)
+        if isnan(mu) throw(error("Require: mu must be a number, was NaN")) end
+        if isnan(sigma) throw(error("Require: sigma must be a number, was NaN")) end
+        if isinf(mu) throw(error("Require: (-Inf < mu < Inf)")) end
         if sigma>=0.0
             return new(mu, sigma)
         else
@@ -104,7 +107,7 @@ global const N01 = Gaussian(0.0, 1.0)
 global const Ninf = Gaussian(0.0, Inf)
 global const N00 = Gaussian(0.0, 0.0)
 
-Base.show(io::IO, g::Gaussian) = print("Gaussian(mu=", round(g.mu,digits=3), ", sigma=", round(g.sigma,digits=3), ")")
+Base.show(io::IO, g::Gaussian) = print(io, "Gaussian(mu=", round(g.mu,digits=6), ", sigma=", round(g.sigma,digits=6), ")")
 function _pi_(N::Gaussian)
     if N.sigma > 0.
         return N.sigma^-2
@@ -168,18 +171,32 @@ function Base.:-(N::Gaussian, M::Gaussian)
     return Gaussian(mu, sigma)
 end
 function Base.:*(N::Gaussian, M::Gaussian)
+    if _pi_(N) == Inf || _pi_(M) == Inf
+        return Gaussian(
+            N.mu/(N.sigma^2/M.sigma^2 + 1) + M.mu/(M.sigma^2/N.sigma^2 + 1),
+            sqrt(1/((1/N.sigma^2) + (1/M.sigma^2)))
+        )
+    end
     _pi = _pi_(N) + _pi_(M)
     _tau = _tau_(N) + _tau_(M)
     mu, sigma = mu_sigma(_tau, _pi)
     return Gaussian(mu, sigma)        
 end
 function Base.:*(N::Float64, M::Gaussian)
+    if isinf(N) return Ninf end
     return Gaussian(N*M.mu, abs(N)*M.sigma)
 end
 function Base.:*(M::Gaussian, N::Float64)
+    if isinf(N) return Ninf end
     return Gaussian(N*M.mu, abs(N)*M.sigma)
 end
 function Base.:/(N::Gaussian, M::Gaussian)
+    if _pi_(N) == Inf || _pi_(M) == Inf
+        return Gaussian(
+            N.mu/(1 - N.sigma^2/M.sigma^2) - M.mu/(M.sigma^2/N.sigma^2 - 1),
+            sqrt(1/((1/N.sigma^2) - (1/M.sigma^2)))
+        )
+    end
     _pi = _pi_(N) - _pi_(M)
     _tau = _tau_(N) - _tau_(M)
     mu, sigma = mu_sigma(_tau, _pi)
@@ -208,7 +225,7 @@ struct Player
         Player(prior, beta, gamma, draw)
     end
 end
-Base.show(io::IO, r::Player) = print("Player(Gaussian(mu=", round(r.prior.mu,digits=3),", sigma=", round(r.prior.sigma,digits=3), "), beta=", round(r.beta, digits=3), ", gamma=" , round(r.gamma, digits=3),")")
+Base.show(io::IO, r::Player) = print(io, "Player(Gaussian(mu=", round(r.prior.mu,digits=3),", sigma=", round(r.prior.sigma,digits=3), "), beta=", round(r.beta, digits=3), ", gamma=" , round(r.gamma, digits=3),")")
 function performance(R::Player)
     return forget(R.prior, R.beta)
 end
@@ -461,7 +478,7 @@ mutable struct Batch
     end
 end
 
-Base.show(io::IO, b::Batch) = print("Batch(time=", b.time, ", events=", b.events, ")")
+Base.show(io::IO, b::Batch) = print(io, "Batch(time=", b.time, ", events=", b.events, ")")
 Base.length(b::Batch) = length(b.events)
 
 function add_events(b::Batch, composition::Vector{Vector{Vector{String}}}, results::Vector{Vector{Float64}}=Vector{Vector{Float64}}(), weights::Vector{Vector{Vector{Float64}}}=Vector{Vector{Vector{Float64}}}())
@@ -598,7 +615,7 @@ end
 # History(;composition::Vector{Vector{Vector{String}}}, results::Vector{Vector{Int64}}=Vector{Vector{Int64}}(), times::Vector{Int64}=Int64[], priors::Dict{String,Player}=Dict{String,Player}(), mu::Float64=MU, sigma::Float64=SIGMA, beta::Float64=BETA, gamma::Float64=GAMMA, p_draw::Float64=P_DRAW, online::Bool=false) = History(composition, convert(Vector{Vector{Float64}},results), times, priors, mu=mu, sigma=sigma, beta=beta, gamma=gamma, p_draw=p_draw, online=online)
     
 Base.length(h::History) = h.size
-Base.show(io::IO, h::History) = print("History(Events=", h.size
+Base.show(io::IO, h::History) = print(io, "History(Events=", h.size
                                      ,", Batches=", length(h.batches)
                                     ,", Agents=", length(h.agents), ")")
 function trueskill(h::History, composition::Vector{Vector{Vector{String}}},results::Vector{Vector{Float64}}, times::Vector{Int64}, online::Bool, weights::Vector{Vector{Vector{Float64}}})

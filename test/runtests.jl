@@ -587,7 +587,7 @@ using Test
         tb = [ttt.Player(ttt.Gaussian(2.0,6.0),1.0,0.0)]
         g = ttt.Game([ta,tb], weights=[wa,wb])
         post = ttt.posteriors(g)
-        @test isapprox(post[1][1], ttt.Gaussian(5.557176746, 4.0527906913), 1e-4)
+        @test isapprox(post[1][1], ttt.Gaussian(5.557176746, 4.0527906913), 1e-3)
         @test isapprox(post[2][1], ttt.Gaussian(2.0, 6.0), 1e-4)
         # NOTA: trueskill original tiene probelmas en la aproximación: post[2][1].mu = 1.999644 
         
@@ -627,6 +627,15 @@ using Test
         @test isapprox(post[1][2], ttt.Gaussian(25.834337, 8.320970), 1e-4)
         @test isapprox(post[2][1], ttt.Gaussian(22.079819, 8.180607), 1e-4)
         @test isapprox(post[2][2], ttt.Gaussian(14.987953, 6.308469), 1e-4)
+
+        wa = [1.0, 1.0]
+        wb = [1.0, 0.0]
+        g = ttt.Game([ta,tb], weights=[wa,wb])
+        post = ttt.posteriors(g)
+        @test isapprox(post[1][1], ttt.Gaussian(25.550478, 8.091449), 1e-4)
+        @test isapprox(post[1][2], ttt.Gaussian(25.550478, 8.091449), 1e-4)
+        @test isapprox(post[2][1], ttt.Gaussian(24.449521, 8.091449), 1e-4)
+        @test isapprox(post[2][2], ttt.Gaussian(25.000000, 8.333333), 1e-4)
     end
     @testset "1vs1 TTT with weights" begin
         composition = [[["a"],["b"]], [["b"],["a"]]]
