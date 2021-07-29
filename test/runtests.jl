@@ -1,6 +1,6 @@
-include("../src/TrueSkill.jl")
-using .TrueSkill
-global const ttt = TrueSkill
+include("../src/TrueSkillThroughTime.jl")
+using .TrueSkillThroughTime
+global const ttt = TrueSkillThroughTime
 using Test
 
 @testset "Tests" begin

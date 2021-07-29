@@ -1,9 +1,9 @@
 using CSV
 using DataFrames
 using Dates
-include("../src/TrueSkill.jl")
-using .TrueSkill
-global const ttt = TrueSkill
+include("../src/TrueSkillThroughTime.jl")
+using .TrueSkillThroughTime
+global const ttt = TrueSkillThroughTime
 
 data = CSV.read("input/history.csv", DataFrame)
 times = Dates.value.(data[:,"time_start"] .- Date("1900-1-1"))

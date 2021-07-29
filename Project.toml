@@ -1,15 +1,13 @@
-name = "TrueSkill"
+name = "TrueSkillThroughTime"
 uuid = "093ab8f2-bf28-59ac-8da0-1d7157d27bf9"
 authors = ["Gustavo Landfried <gustavolandfried@gmail.com>"]
 version = "0.1.1"
 
-[deps]
+[compat]
+julia = "^1"
 
 [extras]
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [targets]
 test = ["Test"]
-
-[compat]
-julia = "^1"

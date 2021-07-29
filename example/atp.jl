@@ -1,9 +1,9 @@
 using CSV
 using Dates
 using DataFrames
-include("../src/TrueSkill.jl")
-using .TrueSkill
-global const ttt = TrueSkill
+include("../src/TrueSkillThroughTime.jl")
+using .TrueSkillThroughTime
+global const ttt = TrueSkillThroughTime
 using DataFrames
 
 base = Dates.value(Date("1970-01-01") - Date("1900-01-01"))

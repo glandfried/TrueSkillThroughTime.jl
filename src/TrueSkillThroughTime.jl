@@ -1,4 +1,4 @@
-module TrueSkill
+module TrueSkillThroughTime
 
 global const BETA = 1.0::Float64
 global const MU = 0.0::Float64

@@ -1,8 +1,8 @@
 using DataFrames
 using CSV
-include("../src/TrueSkill.jl")
-using .TrueSkill
-global const ttt = TrueSkill
+include("../src/TrueSkillThroughTime.jl")
+using .TrueSkillThroughTime
+global const ttt = TrueSkillThroughTime
 using Test
 
 p_d_m = [log(0.5)]
