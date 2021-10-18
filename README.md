@@ -1,11 +1,20 @@
 # TrueSkillThroughTime.jl
 
+## Install
+
+    using Pkg
+    Pkg.add("TrueSkillThroughTime")
+    using TrueSkillThroughTime
+    ttt = TrueSkillThroughTime
+
+## Documentation
+
 None of the commonly used skill estimators, such as TrueSkill, Glicko and Item-Response Theory, correctly models the temporal aspect, which prevents having both good initial estimates and comparability between estimates separated in time and space.
 
 TrueSkill Through Time corrects those biases by modeling the entire history of activities using a single Bayesian network.
 The use of an efficient algorithm, that requires only a few linear iterations over the data, allows scaling to millions of observations in few seconds.
 
-A full scientific documentation is discribed at [TrueSkill Through Time: the Julia, Python and R packages](https://github.com/glandfried/TrueSkillThroughTime/releases/download/doc.0.0.0/article-en.pdf) (Versión en español [aquí](https://github.com/glandfried/TrueSkillThroughTime/releases/download/doc.0.0.0/article-es.pdf)).
+A full scientific documentation is discribed at [TrueSkill Through Time: the Julia, Python and R packages](https://github.com/glandfried/TrueSkillThroughTime/releases/download/doc/landfried-learning.pdf) (Versión en español [aquí](https://github.com/glandfried/TrueSkillThroughTime/releases/download/doc/landfried-aprendizaje.pdf)).
 
 ![Lifecycle](https://img.shields.io/badge/lifecycle-experimental-orange.svg)<!--
 ![Lifecycle](https://img.shields.io/badge/lifecycle-maturing-blue.svg)
@@ -13,9 +22,8 @@ A full scientific documentation is discribed at [TrueSkill Through Time: the Jul
 ![Lifecycle](https://img.shields.io/badge/lifecycle-retired-orange.svg)
 ![Lifecycle](https://img.shields.io/badge/lifecycle-archived-red.svg)
 ![Lifecycle](https://img.shields.io/badge/lifecycle-dormant-blue.svg) -->
-[![Build Status](https://travis-ci.com/glandfried/TrueSkill.jl.svg?branch=master)](https://travis-ci.com/glandfried/TrueSkill.jl)
-[![codecov.io](http://codecov.io/github/glandfried/TrueSkillThroughTime.jl/coverage.svg?branch=master)](http://codecov.io/github/glandfried/TrueSkill.jl?branch=master)
-
+[![Build Status](https://travis-ci.com/glandfried/TrueSkill.jl.svg?branch=master)](https://travis-ci.com/glandfried/TrueSkillThroughTime.jl)
+[![codecov.io](http://codecov.io/github/glandfried/TrueSkillThroughTime.jl/coverage.svg?branch=master)](http://codecov.io/github/glandfried/TrueSkillThroughTime.jl?branch=master)
 
 ### Parameters
 
@@ -40,7 +48,7 @@ In the next step we create a game with two teams of two players.
 team_a = [ a1, a2 ]
 team_b = [ a3, a4 ]
 teams = [team_a, team_b]
-g = Game(teams)
+g = ttt.Game(teams)
 ```
 where the result of the game is implicitly defined by the order of the teams in the list: the teams appearing first in the list (lower index) beat those appearing later (higher index).
 
@@ -59,7 +67,7 @@ In this case, the evidence is 0.5 indicating that both teams had the same probab
 Posteriors can be found by manually multiplying the likelihoods and priors, or we can call the method `posteriors()` of class `Game` to compute them.
 
 ```
-pos = posteriors(g)
+pos = ttt.posteriors(g)
 print(pos[1][1])
 > Gaussian(mu=2.361, sigma=5.516)
 print(lhs[1][1] * a1.prior)
@@ -78,7 +86,7 @@ tb = [a2, a3]
 tc = [a4]
 teams = [ta, tb, tc]
 result = [1., 0., 0.]
-g = Game(teams, result, p_draw=0.25)
+g = ttt.Game(teams, result, p_draw=0.25)
 ```
 the team with the highest score is the winner and the teams with the same score are tied.
 The evidence and the posteriors can be queried in the same way as before.
@@ -93,7 +101,7 @@ c1 = [["a"],["b"]]
 c2 = [["b"],["c"]]
 c3 = [["c"],["a"]]
 composition = [c1, c2, c3]
-h = History(composition, gamma=0.0)
+h = ttt.History(composition, gamma=0.0)
 ```
 
 where the variables `c1`, `c2`, and `c3` model the composition of each game using the names of the agents (i.e. their identifiers), the variable `composition` is a list containing the three events,  and the zero value of the parameter `gamma` specifies that skills does not change over time.
@@ -101,7 +109,7 @@ where the variables `c1`, `c2`, and `c3` model the composition of each game usin
 After initialization, the class `History` immediately instantiates a new player for each name and activates the computation of the TrueSkill estimates, using the posteriors of each event as a prior for the next one.
 
 ```
-lc = learning_curves(h)
+lc = ttt.learning_curves(h)
 print(lc["a"])
 > [(1, Gaussian(mu=3.339, sigma=4.985)), (3, Gaussian(mu=-2.688, sigma=3.779))]
 print(lc["b"])
@@ -114,8 +122,8 @@ Although in this example no player is stronger than the others, the TrueSkill es
 TrueSkill Through Time solves this problem by allowing the information to propagate throughout the system by calling the method `convergence()`.
 
 ```
-convergence(h)
-lc = learning_curves(h)
+ttt.convergence(h)
+lc = ttt.learning_curves(h)
 print(lc["a"])
 > [(1, Gaussian(mu=0.0, sigma=2.395)), (3, Gaussian(mu=-0.0, sigma=2.395))]
 print(lc["b"])
@@ -143,11 +151,11 @@ The list `opponents` includes the randomly generated opponents' skills following
 composition = [[["a"], [string(i)]] for i in 1:N]
 results = [r? [1.,0.]:[0.,1.] for r in (Random.randn(N).+target.>Random.randn(N).+opponents)]
 times = [i for i in 1:N]
-priors = Dict{String,Player}()
-for i in 1:N  priors[string(i)] = Player(Gaussian(opponents[i], 0.2))  end
+priors = Dict{String,ttt.Player}()
+for i in 1:N  priors[string(i)] = ttt.Player(Gaussian(opponents[i], 0.2))  end
 
-h = History(composition, results, times, priors, gamma=0.015)
-convergence(h)
+h = ttt.History(composition, results, times, priors, gamma=0.015)
+ttt.convergence(h)
 mu = [tp[2].mu for tp in learning_curves(h)["a"]] 
 ```
 In this code we define four variables to instantiate the class `History`: the `composition` contains 1000 games between the target player and different opponents; the `results` are obtained randomly, sampling the performance of the players; the `time` is a list of integer ranging from 0 to 999 representing the time of each game; and `priors` is a dictionary used to customize player attributes (we assign low uncertainty to the opponents' priors pretending that we know their skills beforehand).
@@ -172,8 +180,8 @@ data = CSV.read("atp.csv")
 dates = Dates.value.(data[:,"time_start"] .- Date("1900-1-1")) 
 matches = [ r.double == "t" ? [[r.w1_id,r.w2_id],[r.l1_id,r.l2_id]] : [[r.w1_id],[r.l1_id]] for r in eachrow(data) ]   
 
-h = History(composition = matches, times = dates, sigma = 1.6, gamma = 0.036)
-convergence(h, epsilon = 0.01, iterations = 10)
+h = ttt.History(composition = matches, times = dates, sigma = 1.6, gamma = 0.036)
+ttt.convergence(h, epsilon = 0.01, iterations = 10)
 ```
 In this code we open the file `atp.csv`, create the variables `dates` and `matches`, and instantiate the class `History`.
 The following figure presents the learning curves of some famous players in ATP history.
@@ -200,12 +208,12 @@ One option is to keep one skill variable per player, that we include in all game
 
 ```
 players = Set(vcat((composition...)...))
-priors = Dict([(p, Player(Gaussian(0., 1.6), 1.0, 0.036) ) for p in players])
+priors = Dict([(p, ttt.Player(Gaussian(0., 1.6), 1.0, 0.036) ) for p in players])
 
 composition_ground = [ r.double == "t" ? [[r.w1_id, r.w1_id*r.ground, r.w2_id, r.w2_id*r.ground],[r.l1_id, r.l1_id*r.ground, r.l2_id, r.l2_id*r.ground]] : [[r.w1_id, r.w1_id*r.ground],[r.l1_id, r.l1_id*r.ground]] for r in eachrow(data) ]   
 
-h_ground = History(composition = composition_ground, times = dates, sigma = 1.0, gamma = 0.01, beta = 0.0, priors = priors)
-convergence(h_ground, epsilon = 0.01, iterations=10)
+h_ground = ttt.History(composition = composition_ground, times = dates, sigma = 1.0, gamma = 0.01, beta = 0.0, priors = priors)
+ttt.convergence(h_ground, epsilon = 0.01, iterations=10)
 ```
 In this example we keep the same prior as before for the players, this time defined in the variable `priors`.
 In this way, the values chosen to initialize the class `History` will only be used for the ground skill factors.
@@ -228,9 +236,5 @@ To assess whether the complexity added by modeling multidimensionality is approp
 2. **test/runrests.jl**: Unit test
 
 Inside **test/** and **example/** you will find a makefile. In each folder you can execute the entire procedure by typing `make` in the terminal. 
-
-
-
-
 
 

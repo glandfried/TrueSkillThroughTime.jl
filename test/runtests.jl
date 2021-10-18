@@ -50,6 +50,16 @@ using Test
         @test isapprox(post[1][1], ttt.Gaussian(20.794779,7.194481), 1e-4) 
         @test isapprox(post[2][1], ttt.Gaussian(29.205220,7.194481), 1e-4)
         
+        p1 = ttt.Player(ttt.Gaussian(5.0,1.0),1.0,0.0)
+        p2 = ttt.Player(ttt.Gaussian(0.0,3.0),1.0,0.0)
+        g = ttt.Game([[p1],[p2]], [0.,1.], 0.0)
+        post = ttt.posteriors(g)
+        @test isapprox(post[1][1], ttt.Gaussian(2.5903940,0.96675978), 1e-4) 
+        @test isapprox(post[2][1], ttt.Gaussian(3.6864532,1.92472916), 1e-4)
+        post = ttt.posteriors(ttt.Game([[p1],[p2]]))
+        @test isapprox(post[1][1], ttt.Gaussian(3.098110082,0.98277509), 1e-4) 
+        @test isapprox(post[2][1], ttt.Gaussian(-0.882990741,2.4967174), 1e-4)
+        
         g = ttt.Game([[ttt.Player(ttt.Gaussian(29.,1.),25.0/6)] ,[ttt.Player(ttt.Gaussian(25.0,25.0/3),25.0/6)]], [0.,1.])
         post = ttt.posteriors(g)
         @test isapprox(post[1][1], ttt.Gaussian(28.896,0.996), 1e-3) 
@@ -306,6 +316,22 @@ using Test
         @test isapprox(ttt.posterior(h2.batches[3],"cj"),ttt.Gaussian(25.001,5.420),1e-3)
     end
     @testset "TrueSkill Through Time" begin
+        composition = [ [["a"],["b"]], [["b"],["a"]] ]
+        priors = Dict{String,ttt.Player}()
+        for k in ["a", "b"] priors[k] = ttt.Player(gamma=0.0) end
+        h = ttt.History(composition=composition, priors=priors)
+        lc = ttt.learning_curves(h) 
+        @test isapprox(lc["a"][1][2],ttt.Gaussian(3.339079,4.985033),1e-5)
+        @test isapprox(lc["a"][2][2],ttt.Gaussian(-1.735808,3.9225),1e-5)
+        @test isapprox(lc["b"][1][2],ttt.Gaussian(-3.339079,4.985033),1e-5)
+        @test isapprox(lc["b"][2][2],ttt.Gaussian(1.735808,3.9225),1e-5)
+        ttt.convergence(h) 
+        lc = ttt.learning_curves(h) 
+        @test isapprox(lc["a"][1][2],ttt.Gaussian(0.0,2.39481),1e-5)
+        @test isapprox(lc["a"][2][2],ttt.Gaussian(0.0,2.39481),1e-5)
+        @test isapprox(lc["b"][1][2],ttt.Gaussian(0.0,2.39481),1e-5)
+        @test isapprox(lc["b"][2][2],ttt.Gaussian(0.0,2.39481),1e-5)
+        
         composition = [ [["a"],["b"]], [["a"],["c"]] , [["b"],["c"]] ]
         results = [[1.,0.],[0.,1.],[1.,0.]]
         priors = Dict{String,ttt.Player}()
