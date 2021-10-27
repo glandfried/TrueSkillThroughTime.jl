@@ -1,0 +1,79 @@
+\usepackage{fullpage}
+\usepackage{cite}
+\usepackage[utf8]{inputenc}
+\usepackage{a4wide}
+\usepackage{url}
+\usepackage{graphicx}
+\usepackage{caption}
+\usepackage{float} % para que los gr\'aficos se queden en su lugar con [H]
+\usepackage{subcaption}
+\usepackage{wrapfig}
+\usepackage{color}
+\usepackage{amsmath} %para escribir funci\'on partida , matrices
+\usepackage{amsthm} %para numerar definciones y teoremas
+\usepackage[hidelinks]{hyperref} % para inlcuir links dentro del texto
+\usepackage{tabu} 
+\usepackage{comment}
+\usepackage{amsfonts} % \mathbb{N} -> conjunto de los n\'umeros naturales  
+\usepackage{enumerate}
+\usepackage{listings}
+\usepackage[colorinlistoftodos, textsize=small]{todonotes} % Para poner notas en el medio del texto!! No olvidar hacer. 
+\usepackage{framed} % Para encuadrar texto. \begin{framed}
+\usepackage{csquotes} % Para citar texto \begin{displayquote}
+\usepackage{epigraph} % Epigrafe  \epigraph{texto}{\textit{autor}}
+\usepackage{authblk}
+\usepackage{titlesec}
+\usepackage{varioref}
+\usepackage{bm} % \bm{\alpha} bold greek symbol
+\usepackage{pdfpages} % \includepdf
+\usepackage[makeroom]{cancel} % \cancel{} \bcancel{} etc
+\usepackage{wrapfig} % \begin{wrapfigure} Pone figura al lado del texto
+\usepackage{mdframed}
+\usepackage{algorithm}
+%\usepackage{quoting}
+\usepackage{mathtools}	
+\usepackage{tikz}
+\usepackage{paracol}
+
+\newcommand{\vm}[1]{\mathbf{#1}}
+\newcommand{\N}{\mathcal{N}}
+\newcommand{\citel}[1]{\cite{#1}\label{#1}}
+\newcommand\hfrac[2]{\genfrac{}{}{0pt}{}{#1}{#2}} %\frac{}{} sin la linea del medio
+
+\newtheorem{midef}{Definition}
+\newtheorem{miteo}{Theorem}
+\newtheorem{mipropo}{Proposition}
+
+\theoremstyle{definition}
+\newtheorem{definition}{Definition}[section]
+\newtheorem{theorem}{Theorem}[section]
+\newtheorem{proposition}{Proposition}[section]
+
+
+%http://latexcolor.com/
+\definecolor{azul}{rgb}{0.36, 0.54, 0.66}
+\definecolor{rojo}{rgb}{0.7, 0.2, 0.116}
+\definecolor{rojopiso}{rgb}{0.8, 0.25, 0.17}
+\definecolor{verdeingles}{rgb}{0.12, 0.5, 0.17}
+\definecolor{ubuntu}{rgb}{0.44, 0.16, 0.39}
+\definecolor{debian}{rgb}{0.84, 0.04, 0.33}
+\definecolor{dkgreen}{rgb}{0,0.6,0}
+\definecolor{gray}{rgb}{0.5,0.5,0.5}
+\definecolor{mauve}{rgb}{0.58,0,0.82}
+
+\lstset{
+  language=Python,
+  aboveskip=3mm,
+  belowskip=3mm,
+  showstringspaces=true,
+  columns=flexible,
+  basicstyle={\small\ttfamily},
+  numbers=none,
+  numberstyle=\tiny\color{gray},
+  keywordstyle=\color{blue},
+  commentstyle=\color{dkgreen},
+  stringstyle=\color{mauve},
+  breaklines=true,
+  breakatwhitespace=true,
+  tabsize=4
+}

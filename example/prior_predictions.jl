@@ -1,8 +1,8 @@
 using DataFrames
 using CSV
-include("../src/TrueSkillThroughTime.jl")
-using .TrueSkillThroughTime
-global const ttt = TrueSkillThroughTime
+include("../src/TrueSkillThroughTim.jl")
+using .TrueSkillThroughTim
+global const ttt = TrueSkillThroughTim
 using Test
 
 p_d_m = [log(0.5)]
@@ -20,16 +20,16 @@ for i in 1:50
     push!(p_d_m_trueskill,ttt.log_evidence(h))
     ttt.convergence(h,iterations=10)
     push!(loocv_hat,ttt.log_evidence(h))
-    push!(p_d_m_hat,ttt.log_evidence(h, online=true))
+    push!(p_d_m_hat,ttt.log_evidence(h, forward=true))
     
     lc = ttt.learning_curves(h)    
-    push!(p_d_m, p_d_m[end]+log(ttt.Game([[ttt.Player(lc["b"][end][2])],[ttt.Player(lc["b"][end][2])]]).evidence))
+    push!(p_d_m, p_d_m[end]+log(ttt.Game([[ttt.Player(lc["b"][end][2])],[ttt.Player(lc["a"][end][2])]]).evidence))
     push!(composition, [["b"],["a"]])
     h = ttt.History(composition)
     push!(p_d_m_trueskill,ttt.log_evidence(h))
     ttt.convergence(h,iterations=10)
     push!(loocv_hat,ttt.log_evidence(h))
-    push!(p_d_m_hat,ttt.log_evidence(h, online=true))
+    push!(p_d_m_hat,ttt.log_evidence(h, forward=true))
 end
 
 @test sum(p_d_m_trueskill .-1e-4 .<= p_d_m) == length(p_d_m)

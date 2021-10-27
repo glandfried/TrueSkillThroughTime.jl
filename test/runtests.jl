@@ -50,7 +50,7 @@ using Test
         @test isapprox(post[1][1], ttt.Gaussian(20.794779,7.194481), 1e-4) 
         @test isapprox(post[2][1], ttt.Gaussian(29.205220,7.194481), 1e-4)
         
-        p1 = ttt.Player(ttt.Gaussian(5.0,1.0),1.0,0.0)
+        p1 = ttt.Player(ttt.Gaussian(3.0,1.0),1.0,0.0)
         p2 = ttt.Player(ttt.Gaussian(0.0,3.0),1.0,0.0)
         g = ttt.Game([[p1],[p2]], [0.,1.], 0.0)
         post = ttt.posteriors(g)
@@ -398,7 +398,7 @@ using Test
         
         h = ttt.History(composition=composition, results=results, mu=0.0,sigma=6.0, beta=1.0, gamma=0.0)
         trueskill_log_evidence = ttt.log_evidence(h)
-        trueskill_log_evidence_online =  ttt.log_evidence(h, online=true)
+        trueskill_log_evidence_online =  ttt.log_evidence(h, forward=true)
         @test isapprox(trueskill_log_evidence , trueskill_log_evidence_online ,rtol=1e-5)
         
         @test isapprox(ttt.posterior(h.batches[1],"b").mu, -1*ttt.posterior(h.batches[1],"c").mu,rtol=1e-5)
@@ -411,7 +411,7 @@ using Test
         step , iter = ttt.convergence(h)
         
         loocv_hat = exp(ttt.log_evidence(h))
-        p_d_m_hat = exp(ttt.log_evidence(h, online=true))
+        p_d_m_hat = exp(ttt.log_evidence(h, forward=true))
         
         @test isapprox( ttt.posterior(h.batches[1],"a"), ttt.posterior(h.batches[1],"b"), 1e-3)
         @test isapprox( ttt.posterior(h.batches[1],"c"), ttt.posterior(h.batches[1],"d"), 1e-3)
@@ -441,7 +441,7 @@ using Test
         results = [[1.,0.],[0.,1.],[1.,0.]]
         
         h = ttt.History(composition=composition, results=results, times = [0, 10, 20], mu=0.0,sigma=6.0, beta=1.0, gamma=0.05)
-        @test Base.summarysize(h) < 3850
+        @test Base.summarysize(h) < 3887
         @test Base.summarysize(h.batches) - Base.summarysize(h.agents) < 3100
         @test Base.summarysize(h.agents) < 700
         @test Base.summarysize(h.batches[2]) - Base.summarysize(h.agents)  < 1000
@@ -570,18 +570,20 @@ using Test
         h = ttt.History(composition)
         p_d_m_2 = exp(ttt.log_evidence(h))*2
         @test isapprox(p_d_m_2, 0.17650911, rtol=1e-5)
-        @test isapprox(p_d_m_2, exp(ttt.log_evidence(h, online=true))*2, rtol=1e-5)
-        @test isapprox(p_d_m_2, exp(ttt.log_evidence(h, online=true, agents = ["a"]))*2, rtol=1e-5)
-        @test isapprox(p_d_m_2, exp(ttt.log_evidence(h, online=false, agents = ["a"]))*2, rtol=1e-5)
+        @test isapprox(p_d_m_2, exp(ttt.log_evidence(h, forward=true))*2, rtol=1e-5)
+        @test isapprox(p_d_m_2, exp(ttt.log_evidence(h, forward=true, agents = ["a"]))*2, rtol=1e-5)
+        @test isapprox(p_d_m_2, exp(ttt.log_evidence(h, forward=false, agents = ["a"]))*2, rtol=1e-5)
         
         ttt.convergence(h,iterations=11)
         loocv_approx_2 = sqrt(exp(ttt.log_evidence(h)))
         @test isapprox(loocv_approx_2, 0.001976774, rtol=1e-5)
         
-        p_d_m_approx_2 = exp(ttt.log_evidence(h, online=true))*2
+        p_d_m_approx_2 = exp(ttt.log_evidence(h, forward=true))*2
         @test loocv_approx_2-p_d_m_approx_2 < 1e-4
-        @test isapprox(loocv_approx_2, exp(ttt.log_evidence(h, online=true, agents= ["b"]))*2, atol=1e-5)
+        @test isapprox(loocv_approx_2, exp(ttt.log_evidence(h, forward=true, agents= ["b"]))*2, atol=1e-5)        
         
+        ho = ttt.History(composition, online= true)
+        @test isapprox(exp(log(0.5*0.1765)/2), exp(ttt.log_evidence(ho)/2), atol=1e-3)
         
     end
     @testset "1vs1 with weights" begin

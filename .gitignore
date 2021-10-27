@@ -21,10 +21,9 @@
 !*.R
 !*.c
 !*.sql
-
-## Texto
 !*.md
 !*.sh
+!*.yml
 
 ## Otros
 !makefile

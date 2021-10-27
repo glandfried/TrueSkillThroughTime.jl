@@ -1,9 +1,47 @@
 module TrueSkillThroughTime
 
+export BETA, MU, SIGMA, GAMMA, P_DRAW
+export Gaussian, +, -, /, *, isapprox, forget
+export Player, performance
+export Game, posteriors, performance
+export History, convergence, learning_curves, log_evidence
+
+"""
+The default standar deviation of the performances is
+
+    global const BETA = 1.0
+    
+This parameter acts as the scale of the estimates.
+A real difference of one `beta` between two skills is equivalent to 76% probability of winning.
+"""
 global const BETA = 1.0::Float64
+"""
+The default mean of the priors is
+
+    global const MU = 0.0
+    
+used by the [`Gaussian` class](@ref gaussian)
+"""
 global const MU = 0.0::Float64
+"""
+The default standar deviation of the priors is
+
+    global const SIGMA = (BETA * 6)
+
+used by the [`Gaussian` class](@ref gaussian)
+"""
 global const SIGMA = (BETA * 6)::Float64
+"""
+The default amount of uncertainty (standar deviation) added to the estimates as time progresses
+
+    global const GAMMA = (BETA * 0.03)
+"""
 global const GAMMA = (BETA * 0.03)::Float64
+"""
+The default probability of a draw is 
+    
+    global const P_DRAW = 0.0
+"""
 global const P_DRAW = 0.0::Float64
 global const EPSILON = 1e-6::Float64
 global const ITERATIONS = 30::Int64
@@ -13,6 +51,8 @@ global const PI = 1/(SIGMA^2)
 global const TAU = MU*PI
 global const minInt64 = (-9223372036854775808)::Int64
 global const maxInt64 = ( 9223372036854775807)::Int64
+
+
 
 function erfc(x::Float64)
     """Complementary error function (thanks to http://bit.ly/zOLqbc)"""
@@ -35,7 +75,6 @@ function erfc(x::Float64)
     return r
 end
 function erfcinv(y::Float64)
-    """The inverse function of erfc."""
     if y >= 2
         return -Inf
     elseif y < 0
@@ -60,6 +99,7 @@ function erfcinv(y::Float64)
     end
     return r
 end
+
 function tau_pi(mu::Float64, sigma::Float64)
     if sigma > 0.
         _pi = sigma^-2
@@ -85,6 +125,17 @@ function mu_sigma(_tau::Float64, _pi::Float64)
     return mu, sigma
 end
 
+"""
+The `Gaussian` class is used to define the prior beliefs of the agents' skills (and for internal computations).
+
+We can create objects by passing the parameters in order or by mentioning the names. 
+
+    Gaussian(mu::Float64=MU, sigma::Float64=SIGMA)
+    Gaussian(;mu::Float64=MU, sigma::Float64=SIGMA)
+
+- `mu` is the mean of the Gaussian distribution
+- `sigma` is the standar deviation of the Gaussian distribution
+"""
 struct Gaussian
     mu::Float64
     sigma::Float64
@@ -122,6 +173,11 @@ function _tau_(N::Gaussian)
         return Inf
     end
 end
+"""
+    cdf(N::Gaussian, x::Float64)
+
+The cumulative density function of the Gaussian distribution
+"""
 function cdf(N::Gaussian, x::Float64)
     z = -(x - N.mu) / (N.sigma * sqrt2)
     return (0.5 * erfc(z))::Float64
@@ -160,16 +216,25 @@ end
 function exclude(N::Gaussian,M::Gaussian)
     return Gaussian(N.mu - M.mu, sqrt(N.sigma^2 - M.sigma^2) )
 end
+"""
+    +(N::Gaussian, M::Gaussian)
+"""
 function Base.:+(N::Gaussian, M::Gaussian)
     mu = N.mu + M.mu
     sigma = sqrt(N.sigma^2 + M.sigma^2)
     return Gaussian(mu, sigma)
 end
+"""
+    -(N::Gaussian, M::Gaussian)
+"""
 function Base.:-(N::Gaussian, M::Gaussian)
     mu = N.mu - M.mu
     sigma = sqrt(N.sigma^2 + M.sigma^2)
     return Gaussian(mu, sigma)
 end
+"""
+    *(N::Gaussian, M::Gaussian)
+"""
 function Base.:*(N::Gaussian, M::Gaussian)
     if N.sigma == 0.0|| M.sigma == 0.0
         mu = N.mu/(N.sigma^2/M.sigma^2 + 1) + M.mu/(M.sigma^2/N.sigma^2 + 1)
@@ -181,14 +246,19 @@ function Base.:*(N::Gaussian, M::Gaussian)
     end
     return Gaussian(mu, sigma)        
 end
-function Base.:*(N::Float64, M::Gaussian)
-    if isinf(N) return Ninf end
-    return Gaussian(N*M.mu, abs(N)*M.sigma)
+"""
+    +(k::Float64, M::Gaussian)
+"""
+function Base.:*(k::Float64, M::Gaussian)
+    if isinf(k) return Ninf end
+    return Gaussian(k*M.mu, abs(k)*M.sigma)
 end
-function Base.:*(M::Gaussian, N::Float64)
-    if isinf(N) return Ninf end
-    return Gaussian(N*M.mu, abs(N)*M.sigma)
+function Base.:*(M::Gaussian, k::Float64)
+    return k*M
 end
+"""
+    /(N::Gaussian, M::Gaussian)
+"""
 function Base.:/(N::Gaussian, M::Gaussian)
     if N.sigma == 0.0|| M.sigma == 0.0
         mu = N.mu/(1 - N.sigma^2/M.sigma^2) - M.mu/(M.sigma^2/N.sigma^2 - 1)
@@ -200,17 +270,33 @@ function Base.:/(N::Gaussian, M::Gaussian)
     end
     return Gaussian(mu, sigma)        
 end
-function Base.isapprox(N::Gaussian, M::Gaussian, atol::Real=0)
-    return (abs(N.mu - M.mu) < atol) & (abs(N.sigma - M.sigma) < atol)
-end
+"""
+    forget(N::Gaussian, gamma::Float64, t::Int64=1)
+"""
 function forget(N::Gaussian, gamma::Float64, t::Int64=1)
     return Gaussian(N.mu, sqrt(N.sigma^2 + t*gamma^2))
+end
+"""
+    isapprox(N::Gaussian, M::Gaussian, atol::Real=0)
+"""
+function Base.isapprox(N::Gaussian, M::Gaussian, atol::Real=0)
+    return (abs(N.mu - M.mu) < atol) & (abs(N.sigma - M.sigma) < atol)
 end
 function compute_margin(p_draw::Float64, sd::Float64)
     _N = Gaussian(0.0, sd )
     res = abs(ppf(_N, 0.5-p_draw/2))
     return res 
 end
+"""
+The `Player` class is used to define the features of the agents. We can create objects by indicating the parameters in order or by mentioning their names. 
+
+    Player(prior::Gaussian=Gaussian(MU,SIGMA), beta::Float64=BETA, gamma::Float64=GAMMA)
+    Player(;prior::Gaussian=Gaussian(MU,SIGMA), beta::Float64=BETA, gamma::Float64=GAMMA)
+    
+- `prior` is the prior belief distribution of skill hypotheses
+- `beta` is the standar deviation of the agent performance
+- `gamma` is the uncertainty (standar deviation) added to the estimates as time progresses
+"""
 struct Player
     prior::Gaussian
     beta::Float64
@@ -224,6 +310,9 @@ struct Player
     end
 end
 Base.show(io::IO, r::Player) = print(io, "Player(Gaussian(mu=", round(r.prior.mu,digits=3),", sigma=", round(r.prior.sigma,digits=3), "), beta=", round(r.beta, digits=3), ", gamma=" , round(r.gamma, digits=3),")")
+"""
+    performance(R::Player)
+"""
 function performance(R::Player)
     return forget(R.prior, R.beta)
 end
@@ -281,6 +370,19 @@ function Base.:>(tuple::Tuple{Float64,Float64}, threshold::Float64)
     return (tuple[1] > threshold) | (tuple[2] > threshold)
 end
 
+"""
+The `Game` class
+
+    Game(teams::Vector{Vector{Player}}, result::Vector{Float64}, p_draw::Float64, weights::Vector{Vector{Float64}})
+
+Properties:
+- `teams::Vector{Vector{Player}}`
+- `result::Vector{Float64}`
+- `p_draw::Float64`
+- `weights::Vector{Vector{Float64}}`
+- `likelihoods::Vector{Vector{Gaussian}}`
+- `evidence::Float64`
+"""
 mutable struct Game
     teams::Vector{Vector{Player}}
     result::Vector{Float64}
@@ -319,7 +421,9 @@ function performance(team::Vector{Player}, weights::Vector{Float64})
     end
     return p
 end
-
+"""
+    performance(G::Game,i::Int64)
+"""
 function performance(G::Game,i::Int64)
     return performance(G.teams[i], G.weights[i])
 end 
@@ -385,6 +489,9 @@ function likelihoods(g::Game)
     g.likelihoods = [likelihoods(t, w, m) for (t,w,m) in zip(g.teams, g.weights, m_t_ft)]
     return g.likelihoods
 end
+"""
+    posteriors(g::Game)
+"""
 function posteriors(g::Game)
     return [[ g.likelihoods[e][i] * g.teams[e][i].prior for i in 1:length(g.teams[e])] for e in 1:length(g)]
 end
@@ -509,17 +616,19 @@ function posteriors(b::Batch)
     end
     return res
 end
-function within_prior(b::Batch, item::Item, online = false)
+function within_prior(b::Batch, item::Item, online = false, forward = false)
     r = b.agents[item.agent].player
     if online
+        return Player(b.skills[item.agent].online,r.beta,r.gamma)
+    elseif forward  
         return Player(b.skills[item.agent].forward,r.beta,r.gamma)
     else
         wp = posterior(b,item.agent)/item.likelihood
         return Player(wp,r.beta,r.gamma)
     end
 end
-function within_priors(b::Batch, event::Int64; online = false)#event=1
-    return [ [within_prior(b,item,online) for item in team.items ] for team in b.events[event].teams ]
+function within_priors(b::Batch, event::Int64; online = false, forward = false)#event=1
+    return [ [within_prior(b,item,online,forward) for item in team.items ] for team in b.events[event].teams ]
 end
 function iteration(b::Batch, from::Int64 = 1)
     for e in from:length(b)#e=1
@@ -536,17 +645,17 @@ function iteration(b::Batch, from::Int64 = 1)
         b.events[e].evidence = g.evidence
     end
 end
-function log_evidence2(b::Batch; online::Bool = false, agents::Vector{String} = Vector{String}())
+function log_evidence2(b::Batch, online::Bool; agents::Vector{String} = Vector{String}(), forward::Bool = false)
     if isempty(agents)
-        if online 
-            return sum([log(Game(within_priors(b, e, online=true), outputs(b.events[e]), b.p_draw, b.events[e].weights).evidence) for e in 1:length(b)])
+        if online | forward
+            return sum([log(Game(within_priors(b, e, online=online, forward=forward), outputs(b.events[e]), b.p_draw, b.events[e].weights).evidence) for e in 1:length(b)])
         else
             return sum([log(event.evidence) for event in b.events])
         end
     else
         filter = [!isdisjoint(vcat((comp...)...),agents) for comp in get_composition(b.events)]
-        if online 
-            return sum([log(Game(within_priors(b, e, online=true), outputs(b.events[e]), b.p_draw, b.events[e].weights).evidence) for e in 1:length(b) if filter[e] ])
+        if online | forward
+            return sum([log(Game(within_priors(b, e, online=online, forward=forward), outputs(b.events[e]), b.p_draw, b.events[e].weights).evidence) for e in 1:length(b) if filter[e] ])
         else
             return sum([log(b.events[e].evidence) for e in 1:length(b.events) if filter[e]])
         end
@@ -582,6 +691,30 @@ function new_forward_info(b::Batch)
     end
     return iteration(b)
 end
+"""
+The `History` class
+    
+    History(composition::Vector{Vector{Vector{String}}},
+    results::Vector{Vector{Float64}}=Vector{Vector{Float64}}(),
+    times::Vector{Int64}=Int64[], priors::Dict{String,Player}=Dict{String,Player}()
+    ; mu::Float64=MU, sigma::Float64=SIGMA, beta::Float64=BETA,
+    gamma::Float64=GAMMA, p_draw::Float64=P_DRAW, online::Bool=false,
+    weights::Vector{Vector{Vector{Float64}}}=Vector{Vector{Vector{Float64}}}())
+
+Properties:
+
+    size::Int64
+    batches::Vector{Batch}
+    agents::Dict{String,Agent}
+    time::Bool
+    mu::Float64
+    sigma::Float64
+    beta::Float64
+    gamma::Float64
+    p_draw::Float64
+    online::Bool
+
+"""
 mutable struct History
     size::Int64
     batches::Vector{Batch}
@@ -593,18 +726,21 @@ mutable struct History
     gamma::Float64
     p_draw::Float64
     online::Bool
-    function History(composition::Vector{Vector{Vector{String}}}, results::Vector{Vector{Float64}}=Vector{Vector{Float64}}(), times::Vector{Int64}=Int64[], priors::Dict{String,Player}=Dict{String,Player}(); mu::Float64=MU, sigma::Float64=SIGMA, beta::Float64=BETA, gamma::Float64=GAMMA, p_draw::Float64=P_DRAW, online::Bool=false, weights::Vector{Vector{Vector{Float64}}}=Vector{Vector{Vector{Float64}}}())
+    weights::Vector{Vector{Vector{Float64}}}
+    epsilon::Float64
+    iterations::Int64
+    function History(composition::Vector{Vector{Vector{String}}}, results::Vector{Vector{Float64}}=Vector{Vector{Float64}}(), times::Vector{Int64}=Int64[], priors::Dict{String,Player}=Dict{String,Player}(); mu::Float64=MU, sigma::Float64=SIGMA, beta::Float64=BETA, gamma::Float64=GAMMA, p_draw::Float64=P_DRAW, online::Bool=false, weights::Vector{Vector{Vector{Float64}}}=Vector{Vector{Vector{Float64}}}(), epsilon::Float64=EPSILON, iterations::Int64=ITERATIONS)
         (length(results) > 0) & (length(composition) != length(results)) && throw(error("(length(times) > 0) & (length(composition) != length(results))"))
         (length(weights) > 0) & (length(composition) != length(weights)) && throw(error("(length(weights) > 0) & (length(composition) != length(weights))"))
         (length(times) > 0) & (length(composition) != length(times)) && throw(error("length(times) > 0) & (length(composition) != length(times))"))
         
         agents = Dict([ (a, Agent(haskey(priors, a) ? priors[a] : Player(Gaussian(mu, sigma), beta, gamma), Ninf, minInt64)) for a in Set(vcat((composition...)...)) ])
-        h = new(length(composition), Vector{Batch}(), agents, length(times)>0, mu, sigma, beta, gamma, p_draw, online)
-        trueskill(h, composition, results, times, online, weights)
+        h = new(length(composition), Vector{Batch}(), agents, length(times)>0, mu, sigma, beta, gamma, p_draw, online, weights, epsilon, iterations)
+        trueskill(h, composition, results, times, online, weights, epsilon, iterations)
         return h
     end
-    function History(;composition::Vector{Vector{Vector{String}}},results::Vector{Vector{Float64}}=Vector{Vector{Float64}}(),times::Vector{Int64}=Int64[],priors::Dict{String,Player}=Dict{String,Player}(), mu::Float64=MU, sigma::Float64=SIGMA, beta::Float64=BETA, gamma::Float64=GAMMA, p_draw::Float64=P_DRAW, online::Bool=false, weights::Vector{Vector{Vector{Float64}}}=Vector{Vector{Vector{Float64}}}())
-        History(composition, results, times, priors, mu=mu, sigma=sigma, beta=beta, gamma=gamma, p_draw=p_draw, online=online, weights=weights)
+    function History(;composition::Vector{Vector{Vector{String}}},results::Vector{Vector{Float64}}=Vector{Vector{Float64}}(),times::Vector{Int64}=Int64[],priors::Dict{String,Player}=Dict{String,Player}(), mu::Float64=MU, sigma::Float64=SIGMA, beta::Float64=BETA, gamma::Float64=GAMMA, p_draw::Float64=P_DRAW, online::Bool=false, weights::Vector{Vector{Vector{Float64}}}=Vector{Vector{Vector{Float64}}}(), epsilon::Float64=EPSILON, iterations::Int64=ITERATIONS)
+        History(composition, results, times, priors, mu=mu, sigma=sigma, beta=beta, gamma=gamma, p_draw=p_draw, online=online, weights=weights, epsilon=epsilon, iterations=iterations)
     end
 end
 
@@ -616,7 +752,7 @@ Base.length(h::History) = h.size
 Base.show(io::IO, h::History) = print(io, "History(Events=", h.size
                                      ,", Batches=", length(h.batches)
                                     ,", Agents=", length(h.agents), ")")
-function trueskill(h::History, composition::Vector{Vector{Vector{String}}},results::Vector{Vector{Float64}}, times::Vector{Int64}, online::Bool, weights::Vector{Vector{Vector{Float64}}})
+function trueskill(h::History, composition::Vector{Vector{Vector{String}}},results::Vector{Vector{Float64}}, times::Vector{Int64}, online::Bool, weights::Vector{Vector{Vector{Float64}}}, epsilon::Float64, iterations::Int64)
     o = length(times)>0 ? sortperm(times) : [i for i in 1:length(composition)]
     i = 1::Int64
     last = 0.0
@@ -638,7 +774,7 @@ function trueskill(h::History, composition::Vector{Vector{Vector{String}}},resul
             for a in keys(b.skills)
                 b.skills[a].online = b.skills[a].forward
             end
-            convergence(h)
+            convergence(h, iterations=h.iterations, epsilon=h.epsilon)
         end
         for a in keys(b.skills)
             h.agents[a].last_time = length(times) == 0 ? maxInt64 : t
@@ -686,7 +822,11 @@ function iteration(h::History)
     
     return step
 end
-function convergence(h::History; epsilon::Float64=EPSILON, iterations::Int64=ITERATIONS, verbose = true)
+"""
+    convergence(h::History; epsilon::Float64=EPSILON,
+    iterations::Int64=ITERATIONS; epsilon::Float64=EPSILON, iterations::Int64=ITERATIONS, verbose = true)
+"""
+function convergence(h::History; epsilon::Float64=h.epsilon, iterations::Int64=h.iterations, verbose = true)
     step = (Inf, Inf)::Tuple{Float64,Float64}
     iter = 1::Int64
     while (step > epsilon) & (iter <= iterations)
@@ -710,6 +850,9 @@ end
 #         end
 #     end
 # end
+"""
+    learning_curves(h::History)
+"""
 function learning_curves(h::History)
     res = Dict{String,Array{Tuple{Int64,Gaussian}}}()
     for b in h.batches
@@ -720,8 +863,11 @@ function learning_curves(h::History)
     end
     return res
 end
-function log_evidence(h::History; online::Bool = false, agents::Vector{String} = Vector{String}() )
-    return sum([log_evidence2(b, online=online, agents = agents) for b in h.batches])
+"""
+    log_evidence(h::History; agents::Vector{String} = Vector{String}(), forward::Bool = false)
+"""
+function log_evidence(h::History; forward::Bool = false, agents::Vector{String} = Vector{String}() )
+    return sum([log_evidence2(b, h.online, agents = agents, forward=forward) for b in h.batches])
 end
 
 function add_events(h::History,composition::Vector{Vector{Vector{String}}};results::Vector{Vector{Float64}}=Vector{Vector{Float64}}(),times::Vector{Int64}=Int64[],priors::Dict{String,Player}=Dict{String,Player}(), weights::Vector{Vector{Vector{Float64}}}=Vector{Vector{Vector{Float64}}}())
@@ -797,6 +943,8 @@ function add_events(h::History,composition::Vector{Vector{Vector{String}}},resul
     h.size = h.size + n
     iteration(h)
 end
+
+
 
 
 end # module

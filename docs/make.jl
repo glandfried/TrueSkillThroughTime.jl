@@ -1,13 +1,11 @@
-using Documenter, TrueSkill
-
+using Documenter, Revise
+using TrueSkillThroughTime
+deploydocs(repo = "github.com/glandfried/TrueSkillThroughTime.jl.git")
 makedocs(
-    modules = [TrueSkill],
+    modules = [TrueSkillThroughTime],
     format = Documenter.HTML(),
     checkdocs = :exports,
-    sitename = "TrueSkill.jl",
+    sitename = "TrueSkillThroughTime.jl",
     pages = Any["index.md"]
 )
 
-deploydocs(
-    repo = "github.com/glandfried/TrueSkill.jl.git",
-)
