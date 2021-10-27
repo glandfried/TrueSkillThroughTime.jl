@@ -1,6 +1,5 @@
 using Documenter, Revise
 using TrueSkillThroughTime
-deploydocs(repo = "github.com/glandfried/TrueSkillThroughTime.jl.git")
 makedocs(
     modules = [TrueSkillThroughTime],
     format = Documenter.HTML(),
@@ -8,4 +7,5 @@ makedocs(
     sitename = "TrueSkillThroughTime.jl",
     pages = Any["index.md"]
 )
+deploydocs(repo = "github.com/glandfried/TrueSkillThroughTime.jl.git")
 

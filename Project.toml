@@ -1,7 +1,7 @@
 name = "TrueSkillThroughTime"
 uuid = "093ab8f2-bf28-59ac-8da0-1d7157d27bf9"
 authors = ["Gustavo Landfried <gustavolandfried@gmail.com>"]
-version = "0.1.1"
+version = "0.1.2"
 
 [compat]
 julia = "^1"
