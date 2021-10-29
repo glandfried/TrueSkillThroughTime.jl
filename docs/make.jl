@@ -8,5 +8,5 @@ makedocs(
     sitename = "TrueSkillThroughTime.jl",
     pages = Any["index.md"]
 )
-deploydocs(repo = "github.com/glandfried/TrueSkillThroughTime.jl.git")
+deploydocs(repo = "github.com/glandfried/TrueSkillThroughTime.jl")
 
