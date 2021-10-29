@@ -1,4 +1,5 @@
-using Documenter, Revise
+using Documenter
+#using Revise
 using TrueSkillThroughTime
 makedocs(
     modules = [TrueSkillThroughTime],
