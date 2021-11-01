@@ -6,7 +6,7 @@ Considering only the frequency of positive results as an indicator of the indivi
 For this reason, all widely used skill estimators are based on pairwise comparisons.
 All currently used skill estimators share some variant of the following causal model:
 
-![elo](../../figures/static/elo.png)
+![](../assets/elo.png)
 
 This is a generative model in which skills ($s$) cause the observable results ($r$) mediated by the difference of hidden performances, $d =p_i - p_j$.
 Even if the skills are constant at a given point in time, the performances are random variables around their unknown true skill, $p \sim \mathcal{N}(s,\beta^2)$.
@@ -17,7 +17,7 @@ Observable variables are painted gray, hidden are transparent, and constants are
 ## The scale of estimates
 
 The standard deviation of performances $\beta$, is the same for all the agents, acts as the scale of the estimates.
-A real skill difference of one beta between is equivalent to 76% probability of winning in favor of the stronger agent.
+A real skill difference of one beta between two agents is equivalent to 76% probability of winning in favor of the stronger agent.
 For this reason we choose the default value to be 1.
 
 ```@docs

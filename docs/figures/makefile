@@ -3,10 +3,10 @@ all: pdf clean
 pdf:
 	pdflatex *.tex
 
-static/elo.png:
+../src/assets/elo.png:
 	pdflatex elo.tex
-	convert -density 300 elo.pdf -quality 90 static/elo.png
-	convert static/elo.png -channel RGB -negate static/elo_dark.png
+	convert -density 300 elo.pdf -quality 90 ../src/assets/elo.png
+	convert ../src/assets/elo.png -channel RGB -negate ../src/assets/elo_dark.png
 	
 clean:
 	- rm -f Rplots.pdf
