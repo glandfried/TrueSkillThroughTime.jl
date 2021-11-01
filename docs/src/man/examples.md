@@ -40,7 +40,7 @@ Finally, we use the `convergence()` method to obtain TrueSkill Through Time esti
 The following figure presents the estimated learning curves of some famous players in ATP's history, which we identified using different colors 
 The learning curves share a similar pattern: they begin with rapid growth, reach an unstable plateau, and end with a slow decline (we hidden the last portion of the players who have long final stages for visualization purposes).
 
-![](../../../static/atp.png)
+![](../assets/atp.png)
 
 The top bar indicates which player was at the top of the ATP's ranking (the bar has no color when player number 1 is not included among the 10 players identified with colors).
 ATP's ranking points are updated every Monday according to the prestige of the tournament and the stage reached. 
@@ -97,13 +97,13 @@ We select a `sigma` that we consider sufficiently large and a dynamic factor `ga
 
 In the following Figures, we show the skill difference that Nadal and Djokovic have in each of the three types of ground.
 
-![](../../../static/atp_ground0.png)
+![](../assets/atp_ground0.png)
 
 Nadal has a notorious skill difference when playing on different surfaces. 
 The Nadal's skill difference between clay and grass grounds is greater than one $\beta$, which means at least 76\% difference in probability of winning compared to itself.
 On the contrary, Djokovic has very similar skills in the three types.
 
-![](../../../static/atp_ground2.png)
+![](../assets/atp_ground2.png)
 
 In the case of Nadal (id `"n409"`), it seems important to model the skill's multi-dimensionality, while in Djokovic's case (id `"d643"`) it seems reasonable to summarize it in a single dimension.
 To assess whether the complexity added by modeling multi-dimensionality is appropriate in general terms, we can compare the joint prior prediction of the models, calling the method `log_evidence()` of the class `History`.

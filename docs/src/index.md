@@ -34,7 +34,7 @@ Depth = 1
 To appreciate the advantages of TrueSkill Through Time, let's see how it works in a real case.
 The following figure presents the estimated learning curves of some famous male players in ATP's history, which we identified using different colors (to see the source code go to section [Real examples](@ref real_example)).
 
-![](../../static/atp.png)
+![](assets/atp.png)
 
 The top bar indicates which player was at the top of the ATP's ranking (the bar has no color when player number 1 is not included among the 10 players identified with colors).
 There is a relative coincidence between the skill estimates and who is at any given moment at the top of the ATP rankings.
@@ -43,7 +43,7 @@ However, TrueSkill Through Time allows comparing the relative ability of players
 The **models commonly used in industry and academia** (TrueSkill, Glicko, Item-Response Theory) propagates information from past events to future events.
 Because this approach is an ad-hoc procedure that does not arise from any probabilistic model, its estimates have a number of problems.
 
-![](../../static/atp_trueskill.png)
+![](assets/atp_trueskill.png)
 
 The advantage of TrueSkill Through Time lies in its temporal causal model, that links all historical activities in the same Bayesian network, guaranteeing reliable initial estimates and comparability between distant estimates.
 
