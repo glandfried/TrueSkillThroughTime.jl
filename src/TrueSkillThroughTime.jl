@@ -370,6 +370,9 @@ function Base.:>(tuple::Tuple{Float64,Float64}, threshold::Float64)
     return (tuple[1] > threshold) | (tuple[2] > threshold)
 end
 
+function evidence(d::Vector{diff_messages}, margin::Vector{Float64}, tie::Vector{Bool}, e::Int64)
+    return !tie[e] ? 1-cdf(d[e].prior, margin[e]) : cdf(d[e].prior, margin[e])-cdf(d[e].prior, -margin[e])
+end
 """
 The `Game` class
 
@@ -443,15 +446,13 @@ function likelihood_teams(g::Game)
     margin = [ g.p_draw==0.0 ?  0.0 :
                compute_margin(g.p_draw, sqrt( sum([a.beta^2 for a in g.teams[o[e]]]) + sum([a.beta^2 for a in g.teams[o[e+1]]]) )) 
                for e in 1:length(d)] 
-    g.evidence = 1
-    for e in 1:length(d)
-        g.evidence *= !tie[e] ? 1-cdf(d[e].prior, margin[e]) : cdf(d[e].prior, margin[e])-cdf(d[e].prior, -margin[e])
-    end
+    g.evidence = 1.0
     step = (Inf, Inf)::Tuple{Float64,Float64}; iter = 0::Int64
     while (step > 1e-6) & (iter < 10)
         step = (0., 0.)
         for e in 1:length(d)-1#e=1
             d[e].prior = posterior_win(t[e]) - posterior_lose(t[e+1])
+            if iter == 0 g.evidence *= evidence(d, margin, tie, e) end
             d[e].likelihood = approx(d[e].prior,margin[e],tie[e])/d[e].prior
             likelihood_lose = posterior_win(t[e]) - d[e].likelihood
             step = max(step,delta(t[e+1].likelihood_lose,likelihood_lose))
@@ -459,6 +460,7 @@ function likelihood_teams(g::Game)
         end
         for e in length(d):-1:2
             d[e].prior = posterior_win(t[e]) - posterior_lose(t[e+1])
+            if (iter == 0) & (e == length(d)) g.evidence *= evidence(d, margin, tie, e) end
             d[e].likelihood = approx(d[e].prior,margin[e],tie[e])/d[e].prior
             likelihood_win = (posterior_lose(t[e+1]) + d[e].likelihood)
             step = max(step,delta(t[e].likelihood_win,likelihood_win))
@@ -467,6 +469,7 @@ function likelihood_teams(g::Game)
         iter += 1
     end
     if length(d)==1
+        g.evidence = evidence(d, margin, tie, 1)
         d[1].prior = posterior_win(t[1]) - posterior_lose(t[2])
         d[1].likelihood = approx(d[1].prior,margin[1],tie[1])/d[1].prior
     end

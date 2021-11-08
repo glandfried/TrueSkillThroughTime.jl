@@ -182,24 +182,15 @@ using Test
             tb = [ttt.Player(ttt.Gaussian(25.,1e-7),25.0/6,25.0/300)]
             tc = [ttt.Player(ttt.Gaussian(25.,1e-7),25.0/6,25.0/300)]
             
-            g_abc = ttt.Game([ta,tb,tc], [3.,2.,1.], 0.)
-            g_acb = ttt.Game([ta,tb,tc], [3.,1.,2.], 0.)
-            g_bac = ttt.Game([ta,tb,tc], [2.,3.,1.], 0.)
-            g_bca = ttt.Game([ta,tb,tc], [1.,3.,2.], 0.)
-            g_cab = ttt.Game([ta,tb,tc], [2.,1.,3.], 0.)
-            g_cba = ttt.Game([ta,tb,tc], [1.,2.,3.], 0.)
-            
-            d1 = ttt.performance(g_abc,1)-ttt.performance(g_abc,2)
-            
-            proba = 0
-            proba += g_abc.evidence
-            proba += g_acb.evidence
-            proba += g_bac.evidence
-            proba += g_bca.evidence
-            proba += g_cab.evidence
-            proba += g_cba.evidence            
-            println("Corregir la evidencia multiequipos para que sume 1")
-            @test  isapprox(proba, 1.49999991)
+            ps = []
+            push!(ps,ttt.Game([ta,tb,tc], [3.,2.,1.], 0.).evidence)
+            push!(ps,ttt.Game([ta,tb,tc], [3.,1.,2.], 0.).evidence)
+            push!(ps,ttt.Game([ta,tb,tc], [2.,3.,1.], 0.).evidence)
+            push!(ps,ttt.Game([ta,tb,tc], [1.,3.,2.], 0.).evidence)
+            push!(ps,ttt.Game([ta,tb,tc], [2.,1.,3.], 0.).evidence)
+            push!(ps,ttt.Game([ta,tb,tc], [1.,2.,3.], 0.).evidence)
+        
+            @test  isapprox(sum(ps), 0.99527507)
         end
     end
     @testset "Forget" begin
