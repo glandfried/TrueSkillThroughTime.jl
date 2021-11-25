@@ -30,14 +30,14 @@ h = ttt.History(composition = matches, times = dates, sigma = 1.6, gamma = 0.036
 ttt.convergence(h, epsilon = 0.01, iterations = 10)
 ```
 
-In this code, we open the file `atp.csv`, create the variables `times` and `composition`, and instantiate the class `History`.
+In this code, we open the file `atp.csv`, create the variables `dates` and `composition`, and instantiate the class `History`.
 We define the event times as the days elapsed from a reference date to the tournament start date, assuming that the skill is the same within each tournament.
 When generating the list `composition` we discriminate whether the games are doubles or singles using the column `double`. 
 The results are determined by the composition's order, placing the winning team first.
 When initializing the class `History` we set the values of `sigma` and `gamma` based on an optimization procedure previously performed.
 Finally, we use the `convergence()` method to obtain TrueSkill Through Time estimates explicitly selecting the convergence criterion: when the change between iterations is less than $0.01$ or when ten iterations are performed.
 
-The following figure presents the estimated learning curves of some famous players in ATP's history, which we identified using different colors 
+The following figure presents the estimated learning curves of some famous players in ATP's history, which we identified using different colors.
 The learning curves share a similar pattern: they begin with rapid growth, reach an unstable plateau, and end with a slow decline (we hidden the last portion of the players who have long final stages for visualization purposes).
 
 ![](../assets/atp.png)
@@ -76,7 +76,7 @@ It is worthwhile to note that the skill of tennis players did not increase abrup
 In the previous example, we summarize the players' skills in a single dimension.
 TrueSkill Through Time allows estimating multi-dimensional skills. 
 It is known that the ability of certain tennis players varies significantly depending on the surface.
-To quantify this phenomenon, we propose modeling each player as a team composed of a generic player, who is included in all the games, and another player representing the ability of the player on a particular surface.
+To quantify this phenomenon, we propose modeling each player as a team composed of a generic player, who is included in all the games, and another player representing their ability on a particular surface.
 For example, Nadal will be represented as a two-player team: `Nadal_generic` and `Nadal_clay` when playing on this kind of surface, and `Nadal_generic` and `Nadal_grass` when participating in the Wimbledon tournament.
 
 ```
