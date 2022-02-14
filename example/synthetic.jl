@@ -1,5 +1,6 @@
-include("../src/TrueSkillThroughTime.jl")
-using .TrueSkillThroughTime
+#using Pkg
+#Pkg.add("TrueSkillThroughTime")
+using TrueSkillThroughTime
 global const ttt = TrueSkillThroughTime
 using Test
 using CSV

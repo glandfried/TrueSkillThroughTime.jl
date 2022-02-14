@@ -1,7 +1,10 @@
-include("../src/TrueSkillThroughTime.jl")
-using .TrueSkillThroughTime
+#using Pkg
+#Pkg.add("TrueSkillThroughTime")
+using TrueSkillThroughTime
 global const ttt = TrueSkillThroughTime
-using CSV; using Dates
+using CSV
+using Dates
+using DataFrames
 
 println("Code 1")
 mu = 0.0; sigma = 6.0; beta = 1.0; gamma = 0.03; draw = 0.0

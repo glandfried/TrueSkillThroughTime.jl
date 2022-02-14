@@ -1,8 +1,9 @@
+#using Pkg
+#Pkg.add("TrueSkillThroughTime")
 using CSV
 using Dates
 using DataFrames
-include("../src/TrueSkillThroughTime.jl")
-using .TrueSkillThroughTime
+using TrueSkillThroughTime
 global const ttt = TrueSkillThroughTime
 using DataFrames
 
