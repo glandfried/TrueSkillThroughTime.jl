@@ -1,7 +1,8 @@
-# Next Release 
+# Release v0.1.3
 
 - Fixed multiplayer evidence
-- A performance test between the Distributions package and own solution. 
+- A performance test between the Distributions package and own solution.
+- Replace `!isdisjoint(a,b)` by `lenght(intersect(a,b))>0`, because `isdisjoint` requires julia 1.5
 
 # Release v0.1.2
 

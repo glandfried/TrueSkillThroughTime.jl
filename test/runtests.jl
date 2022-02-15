@@ -432,10 +432,10 @@ using Test
         results = [[1.,0.],[0.,1.],[1.,0.]]
         
         h = ttt.History(composition=composition, results=results, times = [0, 10, 20], mu=0.0,sigma=6.0, beta=1.0, gamma=0.05)
-        @test Base.summarysize(h) < 3887
-        @test Base.summarysize(h.batches) - Base.summarysize(h.agents) < 3100
+        @test Base.summarysize(h) < 4000
+        @test Base.summarysize(h.batches) - Base.summarysize(h.agents) < 3200
         @test Base.summarysize(h.agents) < 700
-        @test Base.summarysize(h.batches[2]) - Base.summarysize(h.agents)  < 1000
+        @test Base.summarysize(h.batches[2]) - Base.summarysize(h.agents)  < 1100
         
         @test Base.summarysize(h) < Base.summarysize(composition)  * 7
         

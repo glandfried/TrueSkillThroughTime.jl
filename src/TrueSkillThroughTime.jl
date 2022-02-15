@@ -656,7 +656,7 @@ function log_evidence2(b::Batch, online::Bool; agents::Vector{String} = Vector{S
             return sum([log(event.evidence) for event in b.events])
         end
     else
-        filter = [!isdisjoint(vcat((comp...)...),agents) for comp in get_composition(b.events)]
+        filter = [length(intersect(vcat((comp...)...),agents))>0 for comp in get_composition(b.events)]
         if online | forward
             return sum([log(Game(within_priors(b, e, online=online, forward=forward), outputs(b.events[e]), b.p_draw, b.events[e].weights).evidence) for e in 1:length(b) if filter[e] ])
         else
