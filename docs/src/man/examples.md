@@ -140,10 +140,12 @@ Then, plot the learning curves with an uncertainty band.
 ```
 using Plots
 
-# Plot all the learning_curves
 lc = ttt.learning_curves(h)
+agents = collect(keys(h.agents))[1:3] # select some agents
+
+# Plot all the learning_curves
 pp = plot(xlabel="t", ylabel="mu", title="Learning Curves")
-for (i, agent) in enumerate(keys(h.agents))#agent="a"#i=1
+for (i, agent) in enumerate(agents)
     t = [v[1] for v in lc[agent] ]
     mu = [v[2].mu for v in lc[agent] ]
     sigma = [v[2].sigma for v in lc[agent] ]
