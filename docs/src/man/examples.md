@@ -123,11 +123,11 @@ nadal_log_evidence = ttt.log_evidence(h_ground, agents = ["n409"])
 
 In this scenario, Nadal's ability on Clay is $0.87\beta$ higher than on Hard and $1.05\beta$ higher than on Grass. 
 
-## Plotting your learning curves
+## Plotting your own learning curves
 
 Here is an example to plot the learning curves of the class `History`.
-First solve tour own example.
-Here is a dummy one.
+First solve your own example.
+Here is a dummy example.
 
 ```
 composition = [[[string(rand('a':'e'))], [string(rand('a':'e'))]] for i in 1:1000]
@@ -135,7 +135,7 @@ h = ttt.History(composition=composition, gamma=0.03, sigma=1.0)
 ttt.convergence(h)
 ```
 
-Then, plot the learning curves with the an uncertainty band.
+Then, plot the learning curves with an uncertainty band.
 
 ```
 using Plots
@@ -143,12 +143,12 @@ using Plots
 # Plot all the learning_curves
 lc = ttt.learning_curves(h)
 pp = plot(xlabel="t", ylabel="mu", title="Learning Curves")
-for (i, agent) in enumerate(keys(h.agents))#agent="a"
+for (i, agent) in enumerate(keys(h.agents))#agent="a"#i=1
     t = [v[1] for v in lc[agent] ]
     mu = [v[2].mu for v in lc[agent] ]
     sigma = [v[2].sigma for v in lc[agent] ]
-    plot!(t, mu, color=i)
-    plot!(t, mu.+sigma, fillrange=mu.-sigma, alpha=0.2,color=i)
+    plot!(t, mu, color=i, label=agent)
+    plot!(t, mu.+sigma, fillrange=mu.-sigma, alpha=0.2,color=i, label=false)
 end
 display(pp)
 ```
