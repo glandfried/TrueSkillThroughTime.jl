@@ -139,7 +139,7 @@ We can create objects by passing the parameters in order or by mentioning the na
 struct Gaussian
     mu::Float64
     sigma::Float64
-    function Gaussian(mu::Float64=MU, sigma::Float64=SIGMA)
+    function Gaussian(mu::Float64, sigma::Float64)
         if isnan(mu) throw(error("Require: mu must be a number, was NaN")) end
         if isnan(sigma) throw(error("Require: sigma must be a number, was NaN")) end
         if isinf(mu) throw(error("Require: (-Inf < mu < Inf)")) end
@@ -149,10 +149,9 @@ struct Gaussian
             throw(error("Require: (sigma >= 0.0)"))
         end
     end
-    function Gaussian(;mu::Float64=MU, sigma::Float64=SIGMA)
-        return new(mu, sigma)
-    end
 end
+Gaussian(;mu::Float64=MU, sigma::Float64=SIGMA) = Gaussian(mu, sigma)
+Gaussian(mu::Float64) = Gaussian(mu, SIGMA)
 
 global const N01 = Gaussian(0.0, 1.0)
 global const Ninf = Gaussian(0.0, Inf)
@@ -302,13 +301,11 @@ struct Player
     beta::Float64
     gamma::Float64
     draw::Gaussian
-    function Player(prior::Gaussian=Gaussian(MU,SIGMA), beta::Float64=BETA, gamma::Float64=GAMMA, draw::Gaussian=Ninf)
-        new(prior, beta, gamma, draw)
-    end
-    function Player(;prior::Gaussian=Gaussian(MU,SIGMA), beta::Float64=BETA, gamma::Float64=GAMMA, draw::Gaussian=Ninf)
-        Player(prior, beta, gamma, draw)
-    end
+    Player(prior::Gaussian, beta::Float64, gamma::Float64, draw::Gaussian) = new(prior, beta, gamma, draw)
 end
+Player(;prior::Gaussian=Gaussian(MU,SIGMA), beta::Float64=BETA, gamma::Float64=GAMMA, draw::Gaussian=Ninf) = Player(prior, beta, gamma, draw)
+Player(prior::Gaussian, beta::Float64, gamma::Float64) = Player(prior, beta, gamma, Ninf)
+Player(prior::Gaussian, beta::Float64) = Player(prior, beta, GAMMA, Ninf)
 Base.show(io::IO, r::Player) = print(io, "Player(Gaussian(mu=", round(r.prior.mu,digits=3),", sigma=", round(r.prior.sigma,digits=3), "), beta=", round(r.beta, digits=3), ", gamma=" , round(r.gamma, digits=3),")")
 """
     performance(R::Player)
@@ -393,7 +390,7 @@ mutable struct Game
     p_draw::Float64
     likelihoods::Vector{Vector{Gaussian}}
     evidence::Float64
-    function Game(teams::Vector{Vector{Player}}, result::Vector{Float64}=Float64[],p_draw::Float64=0.0,weights::Vector{Vector{Float64}}=Vector{Vector{Float64}}())
+    function Game(teams::Vector{Vector{Player}}, result::Vector{Float64}, p_draw::Float64, weights::Vector{Vector{Float64}})
         ((0.0 > p_draw) | (1.0 <= p_draw)) &&  throw(error("0.0 <= Draw probability < 1.0"))
         (length(result)>0) && (length(teams)!= length(result)) && throw(error("(length(result)>0) & (length(teams)!= length(result))"))
         (length(weights)>0) && (length(teams)!= length(weights)) && throw(error("(length(weights)>0) & (length(teams)!= length(weights))"))
@@ -406,13 +403,10 @@ mutable struct Game
         likelihoods(_g)
         return _g
     end
-    function Game(teams::Vector{Vector{Player}}, result::Vector{Float64}=Float64[];p_draw::Float64=0.0,weights::Vector{Vector{Float64}}=Vector{Vector{Float64}}())
-        Game(teams, result, p_draw, weights)
-    end
-    function Game(teams::Vector{Vector{Player}}; result::Vector{Float64}=Float64[],p_draw::Float64=0.0,weights::Vector{Vector{Float64}}=Vector{Vector{Float64}}())
-        Game(teams, result, p_draw, weights)
-    end
-end        
+end
+Game(teams::Vector{Vector{Player}}, result::Vector{Float64}, p_draw::Float64) = Game(teams, result, p_draw, Vector{Vector{Float64}}())
+Game(teams::Vector{Vector{Player}}, result::Vector{Float64}; p_draw::Float64=0.0,weights::Vector{Vector{Float64}}=Vector{Vector{Float64}}()) = Game(teams, result, p_draw, weights)
+Game(teams::Vector{Vector{Player}}; result::Vector{Float64}=Float64[],p_draw::Float64=0.0,weights::Vector{Vector{Float64}}=Vector{Vector{Float64}}()) = Game(teams, result, p_draw, weights)
 Base.length(G::Game) = length(G.teams)
 function size(G::Game)
     return [length(team) for team in g.teams]
@@ -504,12 +498,12 @@ mutable struct Skill
     likelihood::Gaussian
     elapsed::Int64
     online::Gaussian
-    function Skill(forward::Gaussian=Ninf, backward::Gaussian=Ninf, likelihood::Gaussian=Ninf, elapsed::Int64=0)
+    function Skill(forward::Gaussian, backward::Gaussian, likelihood::Gaussian, elapsed::Int64)
         return new(forward, backward, likelihood, elapsed)
     end
-    function Skill(;forward::Gaussian=Ninf, backward::Gaussian=Ninf, likelihood::Gaussian=Ninf, elapsed::Int64=0)
-        return new(forward, backward, likelihood, elapsed)
-    end
+end
+function Skill(;forward::Gaussian=Ninf, backward::Gaussian=Ninf, likelihood::Gaussian=Ninf, elapsed::Int64=0)
+    return new(forward, backward, likelihood, elapsed)
 end
 mutable struct Agent
     player::Player
@@ -876,8 +870,10 @@ end
 function add_events(h::History,composition::Vector{Vector{Vector{String}}};results::Vector{Vector{Float64}}=Vector{Vector{Float64}}(),times::Vector{Int64}=Int64[],priors::Dict{String,Player}=Dict{String,Player}(), weights::Vector{Vector{Vector{Float64}}}=Vector{Vector{Vector{Float64}}}())
     add_events(h, composition, results, times, priors, weights)
 end
+add_events(h::History,composition::Vector{Vector{Vector{String}}}, results::Vector{Vector{Float64}}) = add_events(h, composition, results, Int64[], Dict{String,Player}(), Vector{Vector{Vector{Float64}}}())
+add_events(h::History,composition::Vector{Vector{Vector{String}}}, results::Vector{Vector{Float64}},times::Vector{Int64}) = add_events(h, composition, results, times, Dict{String,Player}(), Vector{Vector{Vector{Float64}}}())
 
-function add_events(h::History,composition::Vector{Vector{Vector{String}}},results::Vector{Vector{Float64}}=Vector{Vector{Float64}}(),times::Vector{Int64}=Int64[],priors::Dict{String,Player}=Dict{String,Player}(), weights::Vector{Vector{Vector{Float64}}}=Vector{Vector{Vector{Float64}}}())
+function add_events(h::History,composition::Vector{Vector{Vector{String}}},results::Vector{Vector{Float64}},times::Vector{Int64},priors::Dict{String,Player}, weights::Vector{Vector{Vector{Float64}}})
     
     (length(times)>0) & !h.time && throw(error("length(times)>0 but !h.time"))
     (length(times)==0) & h.time && throw(error("length(times)==0 but h.time"))
