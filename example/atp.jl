@@ -9,7 +9,7 @@ using DataFrames
 
 base = Dates.value(Date("1970-01-01") - Date("1900-01-01"))
 
-data = CSV.read("input/history.csv", DataFrame)
+data = CSV.read("input/history.csv", DataFrame, stringtype = String)
 djokovic = "d643"
 federer = "f324"
 sampras = "s402"
