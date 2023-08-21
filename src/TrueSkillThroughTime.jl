@@ -152,8 +152,6 @@ struct Gaussian
 end
 Gaussian(;mu::Float64=MU, sigma::Float64=SIGMA) = Gaussian(mu, sigma)
 Gaussian(mu::Float64) = Gaussian(mu, SIGMA)
-Gaussian() = Gaussian(MU, SIGMA)
-
 
 global const N01 = Gaussian(0.0, 1.0)
 global const Ninf = Gaussian(0.0, Inf)
