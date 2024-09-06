@@ -684,5 +684,9 @@ using Test
         lc = ttt.learning_curves(h)
         
     end
+    @testset "Time Gaussian" begin
+        println("Tiempos Gaussian")
+        @time ttt.N01+ttt.N01
+    end
 end
 
