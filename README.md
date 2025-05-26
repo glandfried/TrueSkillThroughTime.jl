@@ -11,6 +11,19 @@
 
 See the web [https://glandfried.github.io/TrueSkillThroughTime.jl/](https://glandfried.github.io/TrueSkillThroughTime.jl/)
 
+And read the [paper published in the Journal of Statistical Software](https://www.jstatsoft.org/index.php/jss/article/view/v112i06/4680) with the technical documentation.
+
+```
+@article{landfried2025-learning,
+  title={TrueSkill Through Time: Reliable Initial Skill Estimates and Historical Comparability with Julia, Python, and R},
+  author={Landfried, Gustavo and Mocskos, Esteban},
+  journal={Journal of Statistical Software},
+  volume={112},
+  pages={1--41},
+  year={2025}
+}
+```
+
 ----
 
 None of the commonly used skill estimators, such as TrueSkill, Glicko and Item-Response Theory, correctly models the temporal aspect, which prevents having both good initial estimates and comparability between estimates separated in time and space.
